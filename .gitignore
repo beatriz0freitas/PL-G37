@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtualenv
+.venv/
+
+# Pytest
+.pytest_cache/
+
+# Packaging artifacts
+*.egg-info/
+
+# PLY (generated tables / debug output)
+parsetab.py
+parser.out

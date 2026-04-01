@@ -1,0 +1,9 @@
+# bin/fortran77c
+#
+# Runner do compilador.
+#
+# Quando forem implementar:
+# - chamar o módulo/entrypoint Python do compilador
+# - aceitar flags para correr por fases (tokens / AST / semântica / codegen)
+
+

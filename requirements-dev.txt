@@ -1,0 +1,7 @@
+# requirements-dev.txt
+#
+# Dependências de desenvolvimento/testes.
+#
+# Exemplo (quando forem implementar):
+# - pytest>=8
+

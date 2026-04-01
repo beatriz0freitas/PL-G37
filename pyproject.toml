@@ -1,0 +1,10 @@
+# pyproject.toml
+#
+# Configuração do projeto Python (packaging + tooling).
+#
+# Quando forem implementar de verdade, este ficheiro deve conter:
+# - [build-system] (ex: setuptools)
+# - [project] com nome/versão/dependências (ex: ply)
+# - [project.scripts] para expor um CLI (ex: fortran77c)
+# - Configuração de ferramentas (pytest, lint, formatters)
+
