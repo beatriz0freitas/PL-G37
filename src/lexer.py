@@ -13,7 +13,7 @@ O lexer normaliza para maiúsculas (F77 é case-insensitive), excecto em strings
 
 import ply.lex as lex
 
-from errors import LexError, SourceLocation
+from src.errors import LexError, SourceLocation
 
 
 # Pré-processamento de linhas físicas → linhas lógicas
@@ -118,7 +118,38 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
 
     return result
 
+
+
 # Implementação do Lexer 
+
+def _upcase_outside_strings(code: str) -> str:
+    """Normaliza para maiúsculas tudo fora de strings (apostrofes).
+    Garante que operadores pontuados (.le., .and., ...) e keywords
+    são sempre reconhecidos independentemente do case original.
+    """
+    result: list[str] = []
+    in_str = False
+    i = 0
+    while i < len(code):
+        ch = code[i]
+        if ch == "'" and not in_str:
+            in_str = True
+            result.append(ch)
+        elif ch == "'" and in_str:
+            if i + 1 < len(code) and code[i + 1] == "'":
+                result.append("''")
+                i += 2
+                continue
+            else:
+                in_str = False
+                result.append(ch)
+        elif in_str:
+            result.append(ch)   # preserva case dentro da string
+        else:
+            result.append(ch.upper())
+        i += 1
+    return "".join(result)
+
 
 class Fortran77Lexer:
     
@@ -314,29 +345,29 @@ class Fortran77Lexer:
                  source_format: str = "fixed") -> list:
         """
         Analisa o texto Fortran e devolve a lista de tokens.
-
+ 
         Parâmetros
         ----------
         source        : texto completo do ficheiro
         filename      : nome do ficheiro (para mensagens de erro)
         source_format : "fixed" ou "free"
-
+ 
         Devolve
         -------
         Lista de LexToken com atributos: type, value, lineno
         """
         self._filename = filename
-
+ 
         if source_format == "fixed":
             logical_lines = preprocess_fixed(source, filename)
         else:
             logical_lines = preprocess_free(source, filename)
-
+ 
         all_tokens: list = []
-
+ 
         for ll in logical_lines:
             self._current_lineno = ll.lineno
-
+ 
             # Se a linha lógica tem label, emite token LABEL sintético
             if ll.label is not None:
                 tok         = lex.LexToken()
@@ -345,14 +376,15 @@ class Fortran77Lexer:
                 tok.lineno  = ll.lineno
                 tok.lexpos  = 0
                 all_tokens.append(tok)
-
+ 
             # Tokeniza o código da linha lógica
             lx = self.lexer.clone()
             lx.lineno = 1
-            lx.input(ll.code)
-
+            lx.input(_upcase_outside_strings(ll.code))
+ 
             for tok in lx:
                 tok.lineno = ll.lineno   # linha original, não linha PLY
                 all_tokens.append(tok)
-
+ 
         return all_tokens
+ 
