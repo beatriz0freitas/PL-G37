@@ -1,7 +1,1 @@
-# requirements.txt
-#
-# Dependências runtime do compilador.
-#
-# Exemplo (quando forem implementar):
-# - ply>=3.11  (lexer/parser)
-
+ply>=3.11

@@ -1,10 +1,21 @@
-# pyproject.toml
-#
-# Configuração do projeto Python (packaging + tooling).
-#
-# Quando forem implementar de verdade, este ficheiro deve conter:
-# - [build-system] (ex: setuptools)
-# - [project] com nome/versão/dependências (ex: ply)
-# - [project.scripts] para expor um CLI (ex: fortran77c)
-# - Configuração de ferramentas (pytest, lint, formatters)
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.backends.legacy:build"
 
+[project]
+name = "fortran77c"
+version = "0.1.0"
+description = "Compilador Fortran 77 → EWVM"
+requires-python = ">=3.11"
+dependencies = [
+    "ply>=3.11",
+]
+
+[project.scripts]
+fortran77c = "cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["."]
