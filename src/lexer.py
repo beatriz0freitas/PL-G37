@@ -53,8 +53,15 @@ def preprocess_fixed(source: str, filename: str = "<stdin>") -> list[LogicalLine
         cont_char = line[5] if len(line) > 5 else " "
         is_cont = (label_zone == "") and (cont_char not in (" ", "0"))
 
-        # código: índices 6-71 (colunas 7-72)
-        code = (line[6:72] if len(line) > 6 else "").rstrip()
+        # código: índices 6-71 (colunas 7-72) quando há label;
+        # se não há label nem continuação, usa a linha inteira (tolerância
+        # a código escrito na coluna 1, fora do standard mas comum).
+        if label_val is not None:
+            code = (line[6:72] if len(line) > 6 else "").rstrip()
+        elif is_cont:
+            code = (line[6:72] if len(line) > 6 else "").rstrip()
+        else:
+            code = line.rstrip()
 
         if is_cont:
             if cur_code is None:
@@ -387,4 +394,3 @@ class Fortran77Lexer:
                 all_tokens.append(tok)
  
         return all_tokens
- 
