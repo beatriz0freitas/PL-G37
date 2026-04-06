@@ -27,7 +27,7 @@ def parse_args():
 
 
 def run_lex(source: str, filename: str, source_format: str, debug: bool):
-    from lexer import Fortran77Lexer
+    from src.analise_lexica.lexer import Fortran77Lexer
     lexer  = Fortran77Lexer().build(debug=debug)
     tokens = lexer.tokenize(source, filename=filename, source_format=source_format)
     for tok in tokens:
