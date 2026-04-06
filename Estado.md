@@ -1,7 +1,7 @@
 # Estado do Projeto — Compilador Fortran 77
 
 > **Grupo G37 · Processamento de Linguagens 2026**  
-> Última atualização: 2026-04-04
+> Última atualização: 2026-04-06
 
 ---
 
@@ -10,11 +10,11 @@
 | Etapa | Estado |
 |---|---|
 | Análise Léxica | ✅ Completa |
-| Análise Sintática | 🔲 Por implementar |
+| Análise Sintática | ✅ Implementada (base funcional) |
 | Análise Semântica | 🔲 Por implementar |
 | Tradução de Código (→ EWVM) | 🔲 Por implementar |
 | Otimização *(valorização)* | 🔲 Por implementar |
-| Testes | 🟡 Parcial (léxico coberto) |
+| Testes | 🟡 Parcial (léxico + sintático base) |
 
 ---
 
@@ -47,34 +47,38 @@
 
 ---
 
-## 🔲 Análise Sintática — Por implementar
+## ✅ Análise Sintática — Implementada (base)
 
-**Ficheiro:** `src/parser.py` (esqueleto presente)
+**Ficheiros:** `src/analise_sintatica/parser.py`, `src/analise_sintatica/ast_nodes.py`
 
 **Requisitos do enunciado:**
-- [ ] Analisador sintático com `ply.yacc`
-- [ ] Gramática para Fortran 77 cobrindo:
-    - [ ] Declaração de programa: `PROGRAM <nome>`
-    - [ ] Declarações de tipo: `INTEGER`, `REAL`, `LOGICAL`, `CHARACTER`
-    - [ ] Expressões aritméticas com precedência correta (`**` > `*`/`/` > `+`/`-`)
-    - [ ] Expressões relacionais (`.EQ.`, `.LE.`, etc.)
-    - [ ] Expressões lógicas (`.AND.`, `.OR.`, `.NOT.`)
-    - [ ] Atribuição: `VAR = EXPR`
-    - [ ] `IF-THEN-ELSE-ENDIF` (bloco)
-    - [ ] `IF` aritmético: `IF (EXPR) label1, label2, label3`
-    - [ ] Ciclo `DO`: `DO <label> VAR = inicio, fim [, passo]`
-    - [ ] `GOTO <label>`
-    - [ ] `CONTINUE`
-    - [ ] `READ *, varlist` e `PRINT *, exprlist`
-    - [ ] `STOP` e `END`
-    - [ ] Labels de instrução associados a `CONTINUE`
-- [ ] Construção da AST (em `src/ast_nodes.py`)
-- [ ] Reporte de erros sintáticos com número de linha
+- [x] Analisador sintático com `ply.yacc`
+- [x] Gramática base para Fortran 77 cobrindo:
+    - [x] Declaração de programa: `PROGRAM <nome>` ... `END`
+    - [x] Declarações de tipo: `INTEGER`, `REAL`, `LOGICAL`, `CHARACTER`, `DOUBLE PRECISION`
+    - [x] Expressões aritméticas com precedência correta (`**` > `*`/`/` > `+`/`-`)
+    - [x] Expressões relacionais (`.EQ.`, `.LE.`, etc.)
+    - [x] Expressões lógicas (`.AND.`, `.OR.`, `.NOT.`, `.EQV.`, `.NEQV.`)
+    - [x] Atribuição: `VAR = EXPR` e `ARR(I,...) = EXPR`
+    - [x] `IF-THEN-ELSE-ENDIF` (bloco)
+    - [x] `IF` aritmético: `IF (EXPR) label1, label2, label3`
+    - [x] Ciclo `DO`: `DO <label> VAR = inicio, fim [, passo]`
+    - [x] `GOTO <label>`
+    - [x] `CONTINUE`
+    - [x] `READ *, varlist`, `PRINT *, exprlist`, `WRITE (...)`
+    - [x] `STOP`, `RETURN`, `CALL`
+- [x] Construção da AST (em `src/analise_sintatica/ast_nodes.py`)
+- [x] Reporte de erros sintáticos com `ParseError` + `SourceLocation` (ficheiro/linha/coluna)
 
 **Para valorização:**
 - [ ] `SUBROUTINE` e `FUNCTION` (definição e chamada)
 - [ ] Arrays: `DIMENSION`, acesso `A(I)`
 - [ ] `COMMON`, `PARAMETER`, `SAVE`
+
+**Notas atuais:**
+- [x] `errors.py` está integrado no parser (`ParseError`) e no lexer (`LexError`)
+- [x] Mensagens de erro seguem o formato `ficheiro:linha:coluna: error: mensagem`
+- [ ] Melhorar recuperação de erro (atualmente falha rápida na primeira inconformidade)
 
 ---
 
@@ -132,7 +136,7 @@
 | Ficheiro | Cobertura | Resultado |
 |---|---|---|
 | `tests/test_lexer.py` | Léxico completo | ✅ 97/97 |
-| `tests/test_parser_smoke.py` | Vazio | — |
+| `tests/test_parser_smoke.py` | Parser + integração de erros (smoke) | ✅ implementado |
 
 **Fixtures disponíveis:**
 
@@ -146,7 +150,6 @@
 **Por criar:**
 - [ ] `tests/fixtures/somaarr.f` — Exemplo 4 do enunciado (arrays)
 - [ ] `tests/fixtures/conversor.f` — Exemplo 5 do enunciado (função)
-- [ ] `tests/test_parser_smoke.py` — Testes do parser (após implementação)
 - [ ] `tests/test_semantic.py` — Testes semânticos
 - [ ] Ficheiros `.vm` com output esperado para cada fixture
 
@@ -158,20 +161,24 @@
 fortran77c/
 ├── src/
 │   ├── __init__.py
-│   ├── lexer.py        ✅ implementado
+│   ├── analise_lexica/
+│   │   ├── lexer.py        ✅ implementado
+│   │   └── processor.py    ✅ implementado
+│   ├── analise_sintatica/
+│   │   ├── ast_nodes.py    ✅ implementado
+│   │   └── parser.py       ✅ implementado
 │   ├── errors.py       ✅ implementado
 │   ├── config.py       ✅ implementado
-│   ├── ast_nodes.py    🔲 esqueleto
-│   ├── parser.py       🔲 esqueleto
 │   ├── semantic.py     🔲 esqueleto
 │   ├── symbols.py      🔲 esqueleto
 │   ├── ir.py           🔲 esqueleto
 │   ├── optimizer.py    🔲 esqueleto
-│   └── ewvm.py         🔲 esqueleto
+│   └── codegen/
+│       └── ewvm.py     🔲 esqueleto
 ├── bin/
 │   ├── fortran77c      🔲 esqueleto
 │   └── setup           🔲 esqueleto
-├── cli.py              ✅ implementado (stage lex funcional)
+├── src/cli.py          🟡 parcial (stage lex funcional)
 ├── tests/
 │   ├── conftest.py     ✅ implementado
 │   ├── fixtures/
@@ -180,7 +187,7 @@ fortran77c/
 │   │   ├── primo.f         ✅
 │   │   └── continuation.f  ✅
 │   ├── test_lexer.py        ✅ 97 testes
-│   └── test_parser_smoke.py 🔲 vazio
+│   └── test_parser_smoke.py ✅ parser + erros
 ├── pyproject.toml      ✅
 └── requirements*.txt   ✅
 ```

@@ -13,7 +13,7 @@ import ply.yacc as yacc
 
 from src.errors import ParseError, SourceLocation
 from src.analise_lexica.lexer import Fortran77Lexer
-import src.ast_nodes as ast
+import src.analise_sintatica.ast_nodes as ast
 
 
 class Fortran77Parser:
@@ -303,6 +303,22 @@ class Fortran77Parser:
     # Expressões — com precedência declarada acima
     # Operadores binários
     def p_expr_binop(self, p):
+        """expr : expr PLUS expr
+            | expr MINUS expr
+            | expr STAR expr
+            | expr SLASH expr
+            | expr POWER expr
+            | expr CONCAT expr
+            | expr EQ expr
+            | expr NE expr
+            | expr LT expr
+            | expr LE expr
+            | expr GT expr
+            | expr GE expr
+            | expr AND expr
+            | expr OR expr
+            | expr EQV expr
+            | expr NEQV expr"""
         p[0] = ast.BinOp(op=p[2], left=p[1], right=p[3], lineno=p.lineno(2))
 
     # Operadores unários
@@ -363,14 +379,18 @@ class Fortran77Parser:
     # Tratamento de erros
     def p_error(self, p):
         if p:
+            column = getattr(p, "lexpos", -1)
+            column = column + 1 if column >= 0 else 0
             raise ParseError(
                 f"Erro de sintaxe em {p.value!r}",
-                SourceLocation(self._filename, p.lineno, 0),
+                SourceLocation(self._filename, p.lineno, column),
             )
         else:
+            # EOF inesperado: indica a linha seguinte ao último caracter lido.
+            eof_line = self._source_line_count + 1
             raise ParseError(
                 "Erro de sintaxe: fim de ficheiro inesperado",
-                SourceLocation(self._filename, 0, 0),
+                SourceLocation(self._filename, eof_line, 1),
             )
 
 
@@ -388,6 +408,7 @@ class Fortran77Parser:
         depois alimenta o parser PLY.
         """
         self._filename = filename
+        self._source_line_count = source.count("\n")
         tokens = self.lexer.tokenize(source, filename=filename,
                                      source_format=source_format)
         # PLY yacc.parse espera um lexer com input()/token() — criamos um
