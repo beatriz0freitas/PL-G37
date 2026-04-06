@@ -192,14 +192,3 @@ fortran77c/
 └── requirements*.txt   ✅
 ```
 
----
-
-## Correções aplicadas nesta sessão
-
-### Bug: `PROGRAM` na coluna 1 não era reconhecido
-
-**Causa:** O pré-processador `fixed-form` usava estritamente as colunas ANSI: código apenas nas colunas 7-72. Os ficheiros fixture têm `PROGRAM` a começar na coluna 1 (sem os 6 espaços de indentação obrigatórios no standard), o que fazia o pré-processador tratar `PROGR` como zona de label e `M HELLO` como código — resultando em `ID('M')` em vez de `KW_PROGRAM`.
-
-**Correção em `src/lexer.py` → `preprocess_fixed()`:** quando uma linha não tem label numérico e não é linha de continuação, usa-se a linha inteira como código em vez de só as colunas 7-72. Isto mantém compatibilidade com o standard (linhas com label continuam a ler código da col 7) e aceita código na coluna 1.
-
-**Testes afetados:** `test_hello_comeca_com_program`, `test_hello_token_types`, `test_lineno_hello` — todos a passar após a correção.
