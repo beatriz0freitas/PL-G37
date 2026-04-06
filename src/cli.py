@@ -2,6 +2,7 @@
 
 Uso:
     python cli.py --stage lex <ficheiro.f>
+    python cli.py --stage parse <ficheiro.f>
     python cli.py --stage lex --format free <ficheiro.f>
     python cli.py --debug --stage lex <ficheiro.f>
 """
@@ -10,7 +11,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from errors import CompileError
+from src.errors import CompileError
 
 
 def parse_args():
@@ -35,6 +36,21 @@ def run_lex(source: str, filename: str, source_format: str, debug: bool):
     return tokens
 
 
+def run_parse(source: str, filename: str, source_format: str, debug: bool):
+    from src.analise_lexica.lexer import Fortran77Lexer
+    from src.analise_sintatica.parser import Fortran77Parser
+
+    lexer = Fortran77Lexer().build(debug=debug)
+    parser = Fortran77Parser(lexer).build(debug=debug)
+    tree = parser.parse(source, filename=filename, source_format=source_format)
+
+    print(f"[parse] AST criada para programa {tree.name!r}")
+    print(f"[parse] declarações: {len(tree.decls)} | instruções: {len(tree.stmts)}")
+    if debug:
+        print(tree)
+    return tree
+
+
 def main():
     args = parse_args()
     path = Path(args.input)
@@ -50,8 +66,11 @@ def main():
             run_lex(source, args.input, args.source_format, args.debug)
             return
 
-        tokens = run_lex(source, args.input, args.source_format, args.debug)
-        if args.stage in ("parse", "sem", "ir", "codegen"):
+        if args.stage == "parse":
+            run_parse(source, args.input, args.source_format, args.debug)
+            return
+
+        if args.stage in ("sem", "ir", "codegen"):
             print(f"[ stage '{args.stage}' ainda não implementado ]",
                   file=sys.stderr)
 

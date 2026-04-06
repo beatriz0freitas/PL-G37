@@ -178,7 +178,7 @@ fortran77c/
 ├── bin/
 │   ├── fortran77c      🔲 esqueleto
 │   └── setup           🔲 esqueleto
-├── src/cli.py          🟡 parcial (stage lex funcional)
+├── src/cli.py          🟡 parcial (stages lex + parse funcionais)
 ├── tests/
 │   ├── conftest.py     ✅ implementado
 │   ├── fixtures/

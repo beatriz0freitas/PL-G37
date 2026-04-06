@@ -1,6 +1,9 @@
-# Entry point para `python -m fortran77c`.
-#
-# Quando implementar:
-# - chamar o CLI 
+"""Entry point do pacote para execução via `python -m src`."""
+
+from src.cli import main
+
+
+if __name__ == "__main__":
+	main()
 
 
