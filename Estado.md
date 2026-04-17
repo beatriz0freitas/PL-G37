@@ -1,7 +1,7 @@
 # Estado do Projeto — Compilador Fortran 77
 
 > **Grupo G37 · Processamento de Linguagens 2026**  
-> Última atualização: 2026-04-06
+> Última atualização: 2026-04-17
 
 ---
 
@@ -11,39 +11,30 @@
 |---|---|
 | Análise Léxica | ✅ Completa |
 | Análise Sintática | ✅ Implementada (base funcional) |
+| Representação Intermédia (AST -> IR) | ✅ Implementada |
 | Análise Semântica | 🔲 Por implementar |
-| Tradução de Código (→ EWVM) | 🔲 Por implementar |
-| Otimização *(valorização)* | 🔲 Por implementar |
-| Testes | 🟡 Parcial (léxico + sintático base) |
+| Tradução de Código (IR -> EWVM) | 🔲 Por implementar |
+| Otimização (valorização) | 🔲 Por implementar |
+| Testes | ✅ 125/125 a passar |
 
 ---
 
 ## ✅ Análise Léxica — Completa
 
-**Requisitos do enunciado:**
-- [x] Analisador léxico com `ply.lex`
-- [x] Identificação de palavras-chave: `PROGRAM`, `INTEGER`, `REAL`, `LOGICAL`, `IF`, `DO`, `GOTO`, `PRINT`, `READ`, `END`, e mais 40+ keywords F77
-- [x] Identificadores (normalizados para maiúsculas — F77 é case-insensitive)
-- [x] Números inteiros e reais (incluindo notação científica `E`/`D`)
-- [x] Strings entre apóstrofes (com `''` como escape de `'`)
-- [x] Operadores aritméticos: `+`, `-`, `*`, `/`, `**`
-- [x] Operadores relacionais pontuados: `.EQ.`, `.NE.`, `.LT.`, `.LE.`, `.GT.`, `.GE.`
-- [x] Operadores lógicos pontuados: `.AND.`, `.OR.`, `.NOT.`, `.EQV.`, `.NEQV.`
-- [x] Literais lógicos: `.TRUE.`, `.FALSE.`
-- [x] Concatenação de strings: `//`
-- [x] Símbolos especiais: `(`, `)`, `,`, `:`, `=`, `&`
+**Ficheiros:** `src/analise_lexica/lexer.py`, `src/analise_lexica/processor.py`
 
-**Decisão de formato:**
-- [x] Suporte a **fixed-form** (colunas fixas ANSI X3.9-1978)
-    - Comentários com `C`, `c`, `*` ou `!` na coluna 1
-    - Zona de label nas colunas 1-5
-    - Coluna 6 como marcador de continuação
-    - Código nas colunas 7-72 (com tolerância a código na coluna 1)
-- [x] Suporte a **free-form** (extensão moderna)
-    - Comentários com `!`
-    - Continuação com `&`
+**Implementado:**
+- [x] Lexer com `ply.lex`
+- [x] Keywords base do Fortran 77
+- [x] Identificadores case-insensitive (normalização para maiúsculas)
+- [x] Literais inteiros, reais e lógicos
+- [x] Strings com escape de apóstrofo (`''`)
+- [x] Operadores aritméticos, relacionais e lógicos pontuados
+- [x] Suporte a fixed-form e free-form
+- [x] Pré-processamento de labels e continuações de linha
 
-**Testes do léxico: 97/97 a passar** (`pytest tests/test_lexer.py`)
+**Validação:**
+- [x] `tests/test_lexer.py` — **98/98**
 
 ---
 
@@ -51,144 +42,107 @@
 
 **Ficheiros:** `src/analise_sintatica/parser.py`, `src/analise_sintatica/ast_nodes.py`
 
-**Requisitos do enunciado:**
-- [x] Analisador sintático com `ply.yacc`
-- [x] Gramática base para Fortran 77 cobrindo:
-    - [x] Declaração de programa: `PROGRAM <nome>` ... `END`
-    - [x] Declarações de tipo: `INTEGER`, `REAL`, `LOGICAL`, `CHARACTER`, `DOUBLE PRECISION`
-    - [x] Expressões aritméticas com precedência correta (`**` > `*`/`/` > `+`/`-`)
-    - [x] Expressões relacionais (`.EQ.`, `.LE.`, etc.)
-    - [x] Expressões lógicas (`.AND.`, `.OR.`, `.NOT.`, `.EQV.`, `.NEQV.`)
-    - [x] Atribuição: `VAR = EXPR` e `ARR(I,...) = EXPR`
-    - [x] `IF-THEN-ELSE-ENDIF` (bloco)
-    - [x] `IF` aritmético: `IF (EXPR) label1, label2, label3`
-    - [x] Ciclo `DO`: `DO <label> VAR = inicio, fim [, passo]`
-    - [x] `GOTO <label>`
-    - [x] `CONTINUE`
-    - [x] `READ *, varlist`, `PRINT *, exprlist`, `WRITE (...)`
-    - [x] `STOP`, `RETURN`, `CALL`
-- [x] Construção da AST (em `src/analise_sintatica/ast_nodes.py`)
-- [x] Reporte de erros sintáticos com `ParseError` + `SourceLocation` (ficheiro/linha/coluna)
+**Implementado:**
+- [x] Parser com `ply.yacc`
+- [x] `PROGRAM ... END`
+- [x] Declarações de tipo (`INTEGER`, `REAL`, `LOGICAL`, `CHARACTER`, `DOUBLE PRECISION`)
+- [x] Atribuições simples e com índice
+- [x] Expressões aritméticas, relacionais e lógicas com precedência
+- [x] `IF-THEN-ELSE-ENDIF`
+- [x] `IF` aritmético
+- [x] `DO` clássico com label
+- [x] `GOTO`, `CONTINUE`, `STOP`, `RETURN`, `CALL`
+- [x] `READ`, `PRINT`, `WRITE`
+- [x] AST consistente para as etapas seguintes
+- [x] Integração com `errors.py` (`ParseError` + `SourceLocation`)
+- [x] Preservação do `source_label` em instruções com label (útil para IR/codegen)
 
-**Para valorização:**
-- [ ] `SUBROUTINE` e `FUNCTION` (definição e chamada)
-- [ ] Arrays: `DIMENSION`, acesso `A(I)`
-- [ ] `COMMON`, `PARAMETER`, `SAVE`
+**Validação:**
+- [x] `tests/test_parser_smoke.py` — **20/20**
 
-**Notas atuais:**
-- [x] `errors.py` está integrado no parser (`ParseError`) e no lexer (`LexError`)
-- [x] Mensagens de erro seguem o formato `ficheiro:linha:coluna: error: mensagem`
-- [ ] Melhorar recuperação de erro (atualmente falha rápida na primeira inconformidade)
+---
+
+## ✅ Representação Intermédia (AST -> IR) — Implementada
+
+**Ficheiros:**
+- `src/representacao_intermedia/gerador.py`
+- `src/representacao_intermedia/instrucoes.py`
+- `src/representacao_intermedia/operadores.py`
+
+**Integração CLI:**
+- [x] Stage `--stage ir` funcional em `src/cli.py`
+
+**Implementado na IR:**
+- [x] Temporários e labels
+- [x] Instruções de três endereços (atribuição, unário, binário)
+- [x] Saltos condicionais e incondicionais
+- [x] `IF-THEN-ELSE`
+- [x] `IF` aritmético
+- [x] `DO` clássico com fecho em label `CONTINUE`
+- [x] `GOTO`
+- [x] `READ`, `PRINT`, `WRITE`
+- [x] `CALL`, `STOP`, `RETURN`
+- [x] Leitura/escrita de arrays na IR
+
+**Validação:**
+- [x] `tests/test_ir.py` — **7/7**
 
 ---
 
 ## 🔲 Análise Semântica — Por implementar
 
-**Ficheiro:** `src/semantic.py` (esqueleto presente)
+**Ficheiro:** `src/semantic.py`
 
-**Requisitos do enunciado:**
-- [ ] Verificação de tipos: `INTEGER`, `REAL`, `LOGICAL`
-- [ ] Declaração de variáveis antes de uso
-- [ ] Deteção de variáveis duplicadas
-- [ ] Validação de labels: o label de `DO <label>` deve corresponder a um `CONTINUE`
-- [ ] Tabela de símbolos (`src/symbols.py`): `declare()`, `lookup()`, scopes
+**Pendente:**
+- [ ] Verificação de tipos (`INTEGER`, `REAL`, `LOGICAL`)
+- [ ] Uso de variável antes de declaração
+- [ ] Deteção de declarações duplicadas
+- [ ] Regras de labels (`DO <label>` com `CONTINUE` válido)
+- [ ] Anotação semântica da AST
 
-**Decisão em aberto:** suportar ou não *implicit typing* do F77 (variáveis começadas por `I`-`N` são `INTEGER` por omissão). Recomendação: suportar mas avisar, para compatibilidade com os exemplos do enunciado.
-
----
-
-## 🔲 Tradução de Código — Por implementar
-
-**Ficheiros:** `src/ir.py`, `src/ewvm.py` (esqueletos presentes)
-
-**Opção A — Direto para EWVM** (sem IR):
-- [ ] Percorrer a AST e emitir instruções EWVM diretamente
-
-**Opção B — Via IR** (recomendada para valorização):
-- [ ] Definir IR (ex: código de 3 endereços ou stack-based)
-- [ ] Converter AST → IR (`src/ir.py`)
-- [ ] Converter IR → EWVM (`src/ewvm.py`)
-
-**Construções mínimas a suportar na geração de código:**
-- [ ] Expressões aritméticas e lógicas
-- [ ] Atribuição de variáveis
-- [ ] `IF-THEN-ELSE`
-- [ ] Ciclos `DO` com label
-- [ ] `GOTO`
-- [ ] `READ` e `PRINT`
+**Tabela de símbolos:**
+- `src/symbols.py` permanece em esqueleto
 
 ---
 
-## 🔲 Otimização — Por implementar *(valorização)*
+## 🔲 Tradução de Código (IR -> EWVM) — Por implementar
 
-**Ficheiro:** `src/optimizer.py` (esqueleto presente)
+**Ficheiro:** `src/codegen/ewvm.py`
 
+**Pendente:**
+- [ ] Mapeamento das instruções IR para EWVM
+- [ ] Convenções de stack/frame/memória
+- [ ] Geração de artefacto final executável na VM
+
+---
+
+## 🔲 Otimização — Por implementar (valorização)
+
+**Ficheiro:** `src/optimizer.py`
+
+**Pendente:**
 - [ ] Propagação de constantes
 - [ ] Eliminação de código morto
-- [ ] Peephole optimizations no IR/EWVM
+- [ ] Peephole optimization
 
 ---
 
-## 🟡 Testes — Parcial
+## ✅ Estado dos Testes
 
-**Estado atual:**
-
-| Ficheiro | Cobertura | Resultado |
-|---|---|---|
-| `tests/test_lexer.py` | Léxico completo | ✅ 97/97 |
-| `tests/test_parser_smoke.py` | Parser + integração de erros (smoke) | ✅ implementado |
-
-**Fixtures disponíveis:**
-
-| Ficheiro | Programa |
+| Ficheiro | Resultado |
 |---|---|
-| `tests/fixtures/hello.f` | Olá Mundo |
-| `tests/fixtures/fatorial.f` | Fatorial com `DO`/`CONTINUE` |
-| `tests/fixtures/primo.f` | Teste de primalidade com `IF`/`GOTO` |
-| `tests/fixtures/continuation.f` | Continuação de linha (fixed-form) |
+| `tests/test_lexer.py` | ✅ 98/98 |
+| `tests/test_parser_smoke.py` | ✅ 20/20 |
+| `tests/test_ir.py` | ✅ 7/7 |
+| **Total** | ✅ **125/125** |
 
-**Por criar:**
-- [ ] `tests/fixtures/somaarr.f` — Exemplo 4 do enunciado (arrays)
-- [ ] `tests/fixtures/conversor.f` — Exemplo 5 do enunciado (função)
-- [ ] `tests/test_semantic.py` — Testes semânticos
-- [ ] Ficheiros `.vm` com output esperado para cada fixture
+**Fixtures atuais:**
+- `tests/fixtures/hello.f`
+- `tests/fixtures/fatorial.f`
+- `tests/fixtures/primo.f`
+- `tests/fixtures/continuation.f`
 
----
-
-## Estrutura atual do repositório
-
-```
-fortran77c/
-├── src/
-│   ├── __init__.py
-│   ├── analise_lexica/
-│   │   ├── lexer.py        ✅ implementado
-│   │   └── processor.py    ✅ implementado
-│   ├── analise_sintatica/
-│   │   ├── ast_nodes.py    ✅ implementado
-│   │   └── parser.py       ✅ implementado
-│   ├── errors.py       ✅ implementado
-│   ├── config.py       ✅ implementado
-│   ├── semantic.py     🔲 esqueleto
-│   ├── symbols.py      🔲 esqueleto
-│   ├── ir.py           🔲 esqueleto
-│   ├── optimizer.py    🔲 esqueleto
-│   └── codegen/
-│       └── ewvm.py     🔲 esqueleto
-├── bin/
-│   ├── fortran77c      🔲 esqueleto
-│   └── setup           🔲 esqueleto
-├── src/cli.py          🟡 parcial (stages lex + parse funcionais)
-├── tests/
-│   ├── conftest.py     ✅ implementado
-│   ├── fixtures/
-│   │   ├── hello.f         ✅
-│   │   ├── fatorial.f      ✅
-│   │   ├── primo.f         ✅
-│   │   └── continuation.f  ✅
-│   ├── test_lexer.py        ✅ 97 testes
-│   └── test_parser_smoke.py ✅ parser + erros
-├── pyproject.toml      ✅
-└── requirements*.txt   ✅
-```
-
+**Ainda por criar (planeado):**
+- [ ] `tests/test_semantic.py`
+- [ ] Casos de teste para `codegen/ewvm.py`
+- [ ] Ficheiros `.vm` esperados para comparação automática de output
