@@ -128,7 +128,11 @@ class Fortran77Parser:
     def p_stmt_labeled(self, p):
         """stmt : LABEL unlabeled_stmt"""
         s = p[2]
-        # Associa o label ao nó (usado pelo ContinueStmt e DoStmt)
+        # Preserva o label em qualquer instrucao para fases seguintes
+        # (IR/codegen) conseguirem resolver GOTO corretamente.
+        setattr(s, "source_label", p[1])
+
+        # Mantemos o campo especifico de ContinueStmt por compatibilidade.
         if isinstance(s, ast.ContinueStmt):
             s.label = p[1]
         p[0] = s

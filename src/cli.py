@@ -50,6 +50,21 @@ def run_parse(source: str, filename: str, source_format: str, debug: bool):
         print(tree)
     return tree
 
+def run_ir(source: str, filename: str, source_format: str, debug: bool):
+    # 1. Faz o parse para obter a AST
+    tree = run_parse(source, filename, source_format, debug=False)
+    
+    # 2. Gera a IR
+    from src.representacao_intermedia.gerador import IRGenerator
+    generator = IRGenerator()
+    generator.generate(tree)
+    
+    print("[ir] Código Intermédio Gerado:")
+    for instr in generator.instructions:
+        print(f"  {instr}")
+        
+    return generator.instructions
+
 
 def main():
     args = parse_args()
@@ -69,8 +84,12 @@ def main():
         if args.stage == "parse":
             run_parse(source, args.input, args.source_format, args.debug)
             return
+        
+        if args.stage == "ir":
+            run_ir(source, args.input, args.source_format, args.debug)
+            return
 
-        if args.stage in ("sem", "ir", "codegen"):
+        if args.stage in ("sem", "codegen"):
             print(f"[ stage '{args.stage}' ainda não implementado ]",
                   file=sys.stderr)
 
