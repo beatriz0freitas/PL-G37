@@ -74,7 +74,6 @@ class Fortran77Lexer:
         "REAL_LIT",
         "BOOL_LIT",        # .TRUE. / .FALSE.
         "STRING_LIT",
-        "HOLLERITH",
         "LABEL",
         # Operadores relacionais pontuados
         "EQ", "NE", "LT", "LE", "GT", "GE",
@@ -87,7 +86,6 @@ class Fortran77Lexer:
         # Pontuação
         "LPAREN", "RPAREN",
         "COMMA", "COLON", "EQUALS",
-        "AMPERSAND",
     ] + list(reserved.values())
 
     # Regras simples
@@ -100,7 +98,6 @@ class Fortran77Lexer:
     t_COMMA     = r","
     t_COLON     = r":"
     t_EQUALS    = r"="
-    t_AMPERSAND = r"&"
     t_ignore    = " \t"
 
 
@@ -127,15 +124,6 @@ class Fortran77Lexer:
             ".EQV.": "EQV", ".NEQV.": "NEQV",
         }
         t.type = mapping[t.value.upper()]
-        return t
- 
-    def t_HOLLERITH(self, t):
-        r"[0-9]+[Hh][^\n]+"
-        m = re.match(r"([0-9]+)[Hh](.+)", t.value, re.IGNORECASE)
-        if m:
-            n = int(m.group(1))
-            t.value = m.group(2)[:n]
-            t.lexer.lexpos -= len(m.group(2)) - n
         return t
  
     def t_STRING_LIT(self, t):
