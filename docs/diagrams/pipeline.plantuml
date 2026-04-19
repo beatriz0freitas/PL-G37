@@ -1,0 +1,40 @@
+@startuml pipeline
+left to right direction
+skinparam monochrome true
+skinparam shadowing false
+skinparam defaultFontName Inter
+skinparam ArrowThickness 1.2
+skinparam roundCorner 8
+skinparam packageStyle rectangle
+skinparam rectangle {
+  BorderThickness 1
+}
+skinparam note {
+  BorderThickness 1
+}
+
+rectangle "Fonte Fortran (.f)" as SRC
+
+rectangle "<b>Pré-processamento</b>\n\nNormalização linhas" as PRE
+
+rectangle "<b>Análise Léxica</b>\n\nTokens válidos" as LEX
+
+rectangle "<b>Análise Sintática</b>\n\nAST estruturada" as PAR
+
+rectangle "<b>Geração de IR</b>\n\nTAC intermédio" as IR
+
+rectangle "<b>Análise Semântica</b>\n\nRegras contextuais" as SEM
+
+rectangle "<b>Codegen EWVM</b>\n\nCódigo alvo" as CG
+
+rectangle "<b>Otimização</b>\n\nMelhoria desempenho" as OPT
+
+SRC --> PRE
+PRE --> LEX
+LEX --> PAR
+PAR --> IR
+IR --> SEM
+SEM --> CG
+CG --> OPT
+
+@enduml

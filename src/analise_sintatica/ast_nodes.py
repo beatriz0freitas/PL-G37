@@ -27,7 +27,7 @@ Hierarquia:
           └── BinOp
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional
 
 
@@ -35,13 +35,7 @@ from typing import Optional
 # Base
 class Node:
     """Base de todos os nós da AST."""
-    lineno: int = 0   # definido pelas subclasses via dataclass
-
-    def __repr__(self):
-        # Representação compacta: ClassName(field=value, ...)
-        fields = {k: v for k, v in self.__dict__.items() if not k.startswith("_")}
-        fstr = ", ".join(f"{k}={v!r}" for k, v in fields.items())
-        return f"{type(self).__name__}({fstr})"
+    pass
 
 
 
