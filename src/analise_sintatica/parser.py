@@ -31,6 +31,25 @@ class Fortran77Parser:
         self._filename = "<stdin>"
         self.parser = None
 
+    def _build_elseif_branch(self, chain: list):
+        """Converte cadeia ELSEIF/ELSE numa lista de stmts para else_stmts."""
+        if not chain:
+            return []
+
+        head = chain[0]
+        if head[0] == "ELSE":
+            return head[1]
+
+        condition, then_stmts, lineno = head
+        nested_else = self._build_elseif_branch(chain[1:])
+        nested_if = ast.IfStmt(
+            condition=condition,
+            then_stmts=then_stmts,
+            else_stmts=nested_else,
+            lineno=lineno,
+        )
+        return [nested_if]
+
     # ------------------------------------------------------------------
     # Precedência (do menor para o maior)
     # Baseado na especificação ANSI F77:
@@ -203,15 +222,26 @@ class Fortran77Parser:
 
 
     # IF-THEN-ELSE-ENDIF
-    def p_if_then_else(self, p):
-        """if_stmt : IF LPAREN expr RPAREN THEN stmt_list ELSE stmt_list ENDIF"""
-        p[0] = ast.IfStmt(condition=p[3], then_stmts=p[6],
-                          else_stmts=p[8], lineno=p.lineno(1))
+    def p_if_stmt(self, p):
+        """if_stmt : IF LPAREN expr RPAREN THEN stmt_list elseif_chain ENDIF"""
+        p[0] = ast.IfStmt(
+            condition=p[3],
+            then_stmts=p[6],
+            else_stmts=self._build_elseif_branch(p[7]),
+            lineno=p.lineno(1),
+        )
 
-    def p_if_then(self, p):
-        """if_stmt : IF LPAREN expr RPAREN THEN stmt_list ENDIF"""
-        p[0] = ast.IfStmt(condition=p[3], then_stmts=p[6],
-                          else_stmts=[], lineno=p.lineno(1))
+    def p_elseif_chain_elseif(self, p):
+        """elseif_chain : ELSEIF LPAREN expr RPAREN THEN stmt_list elseif_chain"""
+        p[0] = [(p[3], p[6], p.lineno(1))] + p[7]
+
+    def p_elseif_chain_else(self, p):
+        """elseif_chain : ELSE stmt_list"""
+        p[0] = [("ELSE", p[2])]
+
+    def p_elseif_chain_empty(self, p):
+        """elseif_chain :"""
+        p[0] = []
 
     # IF aritmético:  IF (expr) label, label, label
     def p_arith_if(self, p):
@@ -271,6 +301,14 @@ class Fortran77Parser:
         """read_stmt : READ STAR COMMA var_list"""
         p[0] = ast.ReadStmt(variables=p[4], lineno=p.lineno(1))
 
+    def p_read_paren_fmt(self, p):
+        """read_stmt : READ LPAREN expr COMMA expr RPAREN var_list"""
+        p[0] = ast.ReadStmt(variables=p[7], lineno=p.lineno(1))
+
+    def p_read_paren_star(self, p):
+        """read_stmt : READ LPAREN expr COMMA STAR RPAREN var_list"""
+        p[0] = ast.ReadStmt(variables=p[7], lineno=p.lineno(1))
+
     def p_var_list_single(self, p):
         """var_list : lvalue"""
         p[0] = [p[1]]
@@ -290,6 +328,10 @@ class Fortran77Parser:
     def p_write_stmt(self, p):
         """write_stmt : WRITE LPAREN expr COMMA STAR RPAREN print_list"""
         p[0] = ast.WriteStmt(unit=p[3], fmt=None, items=p[7], lineno=p.lineno(1))
+
+    def p_write_stmt_fmt(self, p):
+        """write_stmt : WRITE LPAREN expr COMMA expr RPAREN print_list"""
+        p[0] = ast.WriteStmt(unit=p[3], fmt=p[5], items=p[7], lineno=p.lineno(1))
 
 
 
