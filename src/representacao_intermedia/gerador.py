@@ -214,10 +214,6 @@ class IRGenerator:
         return None
 
     def visit_DoStmt(self, node: ast.DoStmt):
-        if node.body:
-            self._emit_structured_do(node)
-            return None
-
         start_val = self.generate(node.start)
         end_val = self.generate(node.end)
         step_val = self.generate(node.step) if node.step is not None else 1
@@ -258,44 +254,6 @@ class IRGenerator:
             )
         )
         return None
-
-    def _emit_structured_do(self, node: ast.DoStmt) -> None:
-        start_val = self.generate(node.start)
-        end_val = self.generate(node.end)
-        step_val = self.generate(node.step) if node.step is not None else 1
-
-        self.emit(IRAssign(dest=node.var, src=start_val))
-
-        test_label = self.new_label("DO_TEST")
-        body_label = self.new_label("DO_BODY")
-        end_label = self.new_label("DO_END")
-        pos_check_label = self.new_label("DO_POS")
-        neg_check_label = self.new_label("DO_NEG")
-
-        self.emit(IRLabelInstr(test_label))
-
-        step_nonneg = self.new_temp()
-        self.emit(IROp(op=">=", dest=step_nonneg, left=step_val, right=0))
-        self.emit(IRCJump(cond=step_nonneg, true_label=pos_check_label, false_label=neg_check_label))
-
-        self.emit(IRLabelInstr(pos_check_label))
-        pos_cond = self.new_temp()
-        self.emit(IROp(op="<=", dest=pos_cond, left=node.var, right=end_val))
-        self.emit(IRCJump(cond=pos_cond, true_label=body_label, false_label=end_label))
-
-        self.emit(IRLabelInstr(neg_check_label))
-        neg_cond = self.new_temp()
-        self.emit(IROp(op=">=", dest=neg_cond, left=node.var, right=end_val))
-        self.emit(IRCJump(cond=neg_cond, true_label=body_label, false_label=end_label))
-
-        self.emit(IRLabelInstr(body_label))
-        self._visit_stmt_sequence(node.body)
-
-        next_val = self.new_temp()
-        self.emit(IROp(op="+", dest=next_val, left=node.var, right=step_val))
-        self.emit(IRAssign(dest=node.var, src=next_val))
-        self.emit(IRJump(test_label))
-        self.emit(IRLabelInstr(end_label))
 
     def _close_do_loops_for_label(self, label_num: int) -> None:
         closed_any = False
