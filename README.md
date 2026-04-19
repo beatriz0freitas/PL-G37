@@ -9,10 +9,36 @@ Projeto da UC **Processamento de Linguagens**: implementação de um compilador 
 - Python **3.11+**
 - `ply>=3.11`
 - `pytest>=8` (desenvolvimento/testes)
+- `make` (recomendado para simplificar comandos)
 
 ## Instalação
 
-### 1) Confirmar a versão de Python
+### A) Opção recomendada:
+
+```bash
+make setup
+```
+
+Este comando:
+
+- cria `.venv` (se necessário);
+- atualiza `pip`;
+- instala `requirements.txt` e `requirements-dev.txt`.
+
+Para recriar do zero:
+
+```bash
+make setup-recreate
+```
+
+Comandos de instalação atualmente mantidos no `Makefile`:
+
+- `make setup`
+- `make setup-recreate`
+
+### B) Opção manual:
+
+##### 1) Confirmar a versão de Python
 
 ```bash
 python --version
@@ -21,7 +47,7 @@ python --version
 Deve devolver `3.11.x` (ou superior).
 Se o teu sistema usar `python3` em vez de `python`, usa `python3` nos comandos seguintes.
 
-### 2) Criar ambiente virtual
+##### 2) Criar ambiente virtual
 
 ```bash
 python -m venv .venv
@@ -29,7 +55,7 @@ python -m venv .venv
 
 Este comando cria uma pasta `.venv/` com um Python isolado só para este projeto.
 
-### 3) Ativar ambiente virtual
+##### 3) Ativar ambiente virtual
 
 **Linux/macOS (bash/zsh):**
 
@@ -39,13 +65,13 @@ source .venv/bin/activate
 
 Quando está ativo, o terminal normalmente mostra `(.venv)` no início da linha.
 
-### 4) Atualizar `pip` (recomendado)
+##### 4) Atualizar `pip` 
 
 ```bash
 python -m pip install --upgrade pip
 ```
 
-### 5) Instalar dependências
+##### 5) Instalar dependências
 
 ```bash
 pip install -r requirements.txt
@@ -55,7 +81,7 @@ pip install -r requirements-dev.txt
 - `requirements.txt`: dependências de execução do compilador (ex.: `ply`).
 - `requirements-dev.txt`: ferramentas de desenvolvimento/testes (ex.: `pytest`).
 
-### 6) Verificação rápida da instalação
+##### 6) Verificação rápida da instalação
 
 ```bash
 python -m src --stage lex tests/fixtures/hello.f
@@ -66,6 +92,36 @@ Se imprimir tokens, a instalação está funcional.
 ---
 
 ## Execução
+
+### A) Forma recomendada (via `Makefile`)
+
+```bash
+make lex FIXTURE=tests/fixtures/hello.f
+make parse FIXTURE=tests/fixtures/fatorial.f
+make ir FIXTURE=tests/fixtures/primo.f
+```
+
+Com formato explícito:
+
+```bash
+make lex FIXTURE=tests/fixtures/continuation.f FORMAT=fixed
+make lex FIXTURE=tests/fixtures/hello.f FORMAT=free
+```
+
+Ver todos os atalhos disponíveis:
+
+```bash
+make help
+```
+
+Comandos de execução atualmente mantidos no `Makefile`:
+
+- `make lex FIXTURE=... [FORMAT=fixed|free]`
+- `make parse FIXTURE=... [FORMAT=fixed|free]`
+- `make ir FIXTURE=... [FORMAT=fixed|free]`
+- `make clean`
+
+### B) Forma direta (sem Makefile)
 
 O compilador é executado por fases com:
 
@@ -82,7 +138,7 @@ python -m src --stage <fase> [--format fixed|free] [--debug] <ficheiro>
 
 > Nota: `sem` e `codegen` existem na interface, mas ainda não estão implementados.
 
-### 1) Análise léxica (`--stage lex`)
+##### 1) Análise léxica (`--stage lex`)
 
 Faz tokenização e imprime a lista de tokens com linha, tipo e valor.
 
@@ -98,7 +154,7 @@ Uso típico:
 - confirmar labels, literais e operadores;
 - depurar problemas de fixed/free form.
 
-### 2) Análise sintática (`--stage parse`)
+##### 2) Análise sintática (`--stage parse`)
 
 Executa lexer + parser e constrói a AST.
 Imprime um resumo (nome do programa, nº de declarações e instruções).
@@ -117,7 +173,7 @@ python -m src --stage parse --debug tests/fixtures/fatorial.f
 
 No modo `--debug`, imprime também a AST para inspeção.
 
-### 3) Geração de IR (`--stage ir`)
+##### 3) Geração de IR (`--stage ir`)
 
 Executa lexer + parser + gerador de IR e imprime as instruções intermédias.
 
@@ -133,7 +189,7 @@ Uso típico:
 - validar labels e saltos;
 - preparar futura integração com backend EWVM.
 
-### 4) Formato de fonte (`--format`)
+##### 4) Formato de fonte (`--format`)
 
 Por omissão o compilador usa `fixed` (Fortran 77 clássico por colunas).
 Quando o ficheiro está em estilo livre, usa `--format free`.
@@ -157,15 +213,24 @@ python -m src --stage lex --format free <ficheiro.f>
 Executar todos os testes:
 
 ```bash
-pytest
+make test
 ```
 
 Testes por componente:
 
 ```bash
-pytest tests/test_lexer.py
-pytest tests/test_parser_smoke.py
-pytest tests/test_ir.py
+make test-lexer
+make test-parser
+make test-ir
+```
+
+Alternativa direta:
+
+```bash
+python -m pytest
+python -m pytest tests/test_lexer.py
+python -m pytest tests/test_parser_smoke.py
+python -m pytest tests/test_ir.py
 ```
 
 ---
