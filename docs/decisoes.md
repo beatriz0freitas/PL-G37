@@ -4,20 +4,6 @@
 
 ---
 
-## Índice
-
-1. [Visão Geral do Projeto](#1-visão-geral-do-projeto)
-2. [Arquitetura e Pipeline de Compilação](#2-arquitetura-e-pipeline-de-compilação)
-3. [Etapa 1 — Análise Léxica](#3-etapa-1--análise-léxica)
-4. [Etapa 2 — Análise Sintática e AST](#4-etapa-2--análise-sintática-e-ast)
-5. [Etapa 3 — Representação Intermédia (IR)](#5-etapa-3--representação-intermédia-ir)
-6. [Infraestrutura de Suporte](#6-infraestrutura-de-suporte)
-7. [Testes e Validação](#7-testes-e-validação)
-8. [Estado Atual e Trabalho Futuro](#8-estado-atual-e-trabalho-futuro)
-9. [Resumo das Escolhas Técnicas](#9-resumo-das-escolhas-técnicas)
-
----
-
 ## 1. Visão Geral do Projeto
 
 O projeto consiste na implementação de um compilador para um subconjunto significativo de **Fortran 77** (ANSI X3.9-1978) que traduz programas Fortran para código executável na **EWVM** (máquina virtual fornecida pelo docente).

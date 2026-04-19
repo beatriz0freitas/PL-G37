@@ -31,11 +31,6 @@ Para recriar do zero:
 make setup-recreate
 ```
 
-Comandos de instalação atualmente mantidos no `Makefile`:
-
-- `make setup`
-- `make setup-recreate`
-
 ### B) Opção manual:
 
 ##### 1) Confirmar a versão de Python
@@ -65,7 +60,7 @@ source .venv/bin/activate
 
 Quando está ativo, o terminal normalmente mostra `(.venv)` no início da linha.
 
-##### 4) Atualizar `pip` 
+##### 4) Atualizar `pip`
 
 ```bash
 python -m pip install --upgrade pip
@@ -113,13 +108,6 @@ Ver todos os atalhos disponíveis:
 ```bash
 make help
 ```
-
-Comandos de execução atualmente mantidos no `Makefile`:
-
-- `make lex FIXTURE=... [FORMAT=fixed|free]`
-- `make parse FIXTURE=... [FORMAT=fixed|free]`
-- `make ir FIXTURE=... [FORMAT=fixed|free]`
-- `make clean`
 
 ### B) Forma direta (sem Makefile)
 
@@ -214,6 +202,7 @@ Executar todos os testes:
 
 ```bash
 make test
+
 ```
 
 Testes por componente:
