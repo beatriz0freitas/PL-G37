@@ -1,7 +1,7 @@
 # Estado do Projeto — Compilador Fortran 77
 
 > **Grupo G37 · Processamento de Linguagens 2026**
-> Última atualização: 2026-04-17
+> Última atualização: 2026-04-26
 
 ---
 
@@ -13,9 +13,9 @@
 | Análise Sintática                     | ✅ Implementada (base funcional) |
 | Representação Intermédia (AST -> IR) | ✅ Implementada                  |
 | Análise Semântica                     | 🔲 Por implementar               |
-| Tradução de Código (IR -> EWVM)      | 🔲 Por implementar               |
+| Tradução de Código (IR -> EWVM)      | ✅ Implementada                  |
 | Otimização (valorização)            | 🔲 Por implementar               |
-| Testes                                  | ✅ 125/125 a passar              |
+| Testes                                  | ✅ 130/130 a passar              |
 
 ---
 
@@ -109,21 +109,45 @@
 - [ ] Regras de labels (`DO <label>` com `CONTINUE` válido)
 - [ ] Anotação semântica da AST
 
+**Atenção importante para a implementação:**
+
+- [ ] Resolver obrigatoriamente a ambiguidade `CallExpr` vs `ArrayRef` em expressões como `A(I)`.
+- [ ] Se `A` estiver declarada como array, a análise semântica deve normalizar esse nó antes da geração de IR/backend.
+- [ ] O backend atual tem uma heurística temporária para este caso; quando a semântica existir, esta decisão deve passar a ser feita aqui.
+
 **Tabela de símbolos:**
 
 - `src/symbols.py` permanece em esqueleto
 
 ---
 
-## 🔲 Tradução de Código (IR -> EWVM) — Por implementar
+## ✅ Tradução de Código (IR -> EWVM) — Implementada
 
-**Ficheiro:** `src/codegen/ewvm.py`
+**Ficheiros:**
 
-**Pendente:**
+- `src/codegen/ewvm.py`
+- `src/codegen/ewvm_generator.py`
+- `src/codegen/layout.py`
+- `src/codegen/decls.py`
 
-- [ ] Mapeamento das instruções IR para EWVM
-- [ ] Convenções de stack/frame/memória
-- [ ] Geração de artefacto final executável na VM
+**Implementado:**
+
+- [X] Tradução de IR para código texto EWVM
+- [X] Integração CLI com `--stage codegen`
+- [X] Alocação global com `ALLOC`
+- [X] Suporte a escalares com `PUSHG` / `POPG`
+- [X] Literais inteiros, reais e strings com `PUSHI` / `PUSHF` / `PUSHS`
+- [X] Operações aritméticas, relacionais e lógicas
+- [X] Saltos `JUMP` e `JZ`
+- [X] `READ`, `PRINT`, `WRITE` com seleção de instrução por tipo
+- [X] Arrays com `LOADN` / `STOREN` e indexação Fortran base 1
+- [X] Chamadas intrínsecas base (`MOD`, `ABS`, `SQRT`, `MAX`, `MIN`)
+
+**Limitações conhecidas:**
+
+- [ ] A análise semântica ainda não existe, por isso a distinção `CallExpr` vs `ArrayRef` em expressões é parcialmente resolvida no backend com base nas declarações.
+- [ ] Ainda não há execução automática do `.vm` na VM do docente para validação end-to-end.
+- [ ] Ainda não há symbol table semântica a alimentar o backend; o codegen extrai metadados diretamente da AST.
 
 ---
 
@@ -146,7 +170,8 @@
 | `tests/test_lexer.py`        | ✅ 98/98            |
 | `tests/test_parser_smoke.py` | ✅ 20/20            |
 | `tests/test_ir.py`           | ✅ 7/7              |
-| **Total**                | ✅**125/125** |
+| `tests/test_codegen.py`      | ✅ 5/5              |
+| **Total**                | ✅**130/130** |
 
 **Fixtures atuais:**
 
@@ -158,7 +183,6 @@
 **Ainda por criar (planeado):**
 
 - [ ] `tests/test_semantic.py`
-- [ ] Casos de teste para `codegen/ewvm.py`
 - [ ] Ficheiros `.vm` esperados para comparação automática de output
 
 ---
@@ -294,7 +318,7 @@ def visit_TypeDecl(self, node: ast.TypeDecl):
             ))
 ```
 
-#### S2b — Resolução `CallExpr` vs `ArrayRef`
+#### S2b — Resolução `CallExpr` vs `ArrayRef` **(obrigatório)**
 
 O parser produz `CallExpr` para `A(I)` em expressões. A semântica resolve:
 
@@ -322,6 +346,8 @@ def _intrinsic_return_type(self, name: str) -> str:
     }
     return INTRINSIC_TYPES.get(name, "INTEGER")   # default conservador
 ```
+
+> Nota: este passo não é opcional no estado atual do projeto. O backend EWVM já contém uma compensação temporária para este problema, mas ela só existe enquanto a análise semântica não estiver implementada.
 
 #### S2c — Verificação de tipos em expressões
 
@@ -481,9 +507,14 @@ class TestFixtures:
 
 ---
 
-## 🔲 Tradução de Código (IR → EWVM) — Por implementar
+## ✅ Tradução de Código (IR → EWVM) — Implementada
 
-**Ficheiro:** `src/codegen/ewvm.py`
+**Ficheiros:**
+
+- `src/codegen/ewvm.py` — fachada pública do backend
+- `src/codegen/ewvm_generator.py` — tradução IR → EWVM
+- `src/codegen/layout.py` — layout de memória global
+- `src/codegen/decls.py` — extração de tipos/dimensões a partir da AST
 
 ### Instruções EWVM relevantes
 
@@ -512,7 +543,16 @@ class TestFixtures:
 
 ---
 
-### Passo C1 — Modelo de Memória (`MemoryLayout`)
+### Estrutura atual do backend
+
+O backend foi desacoplado em componentes pequenos para reduzir acoplamento e tornar a manutenção mais simples:
+
+- `MemoryLayout`: gere endereços de escalares e arrays
+- `extract_decl_info`: recolhe tipos e dimensões diretamente das declarações do `Program`
+- `EWVMGenerator`: concentra apenas a tradução efetiva das instruções IR
+- `ewvm.py`: reexporta a API pública e preserva compatibilidade de imports
+
+### C1 — Modelo de Memória (`MemoryLayout`)
 
 Para a primeira versão, todas as variáveis são globais (sem subprogramas). Cada variável recebe um endereço inteiro sequencial no heap EWVM:
 
@@ -552,7 +592,7 @@ class MemoryLayout:
 
 ---
 
-### Passo C2 — Estrutura do Gerador (`EWVMGenerator`)
+### C2 — Estrutura do Gerador (`EWVMGenerator`)
 
 ```python
 class EWVMGenerator:
@@ -587,7 +627,7 @@ class EWVMGenerator:
 
 ---
 
-### Passo C3 — Tradução instrução a instrução
+### C3 — Tradução instrução a instrução
 
 Método `_translate` com `match` Python 3.10+:
 
@@ -828,7 +868,7 @@ def _expand_intrinsic(self, name: str, args: list) -> None:
 
 ---
 
-### Passo C4 — Integração no CLI
+### C4 — Integração no CLI
 
 ```python
 def run_codegen(source: str, filename: str, source_format: str, debug: bool):
@@ -845,7 +885,7 @@ def run_codegen(source: str, filename: str, source_format: str, debug: bool):
 
 ---
 
-### Passo C5 — Testes (`tests/test_codegen.py`)
+### C5 — Testes (`tests/test_codegen.py`)
 
 ```python
 class TestCodigoHello:
@@ -933,9 +973,9 @@ def eliminate_single_use_temps(instructions: list[IRInstr]) -> list[IRInstr]:
 | `tests/test_lexer.py`        | ✅ 98/98                        |
 | `tests/test_parser_smoke.py` | ✅ 20/20                        |
 | `tests/test_ir.py`           | ✅ 7/7                          |
-| `tests/test_semantic.py`     | 🔲 Por criar (mínimo 15 casos) |
-| `tests/test_codegen.py`      | 🔲 Por criar (mínimo 10 casos) |
-| **Total implementados**  | ✅**125/125**             |
+| `tests/test_semantic.py`     | 🔲 Por criar                 |
+| `tests/test_codegen.py`      | ✅ 5/5                       |
+| **Total implementados**  | ✅**130/130**             |
 
 **Fixtures actuais:**
 
@@ -970,21 +1010,10 @@ def eliminate_single_use_temps(instructions: list[IRInstr]) -> list[IRInstr]:
     ├── S3: Integração CLI --stage sem
     └── S4: tests/test_semantic.py (mínimo 15 casos)
 
-3.  Geração de Código EWVM
-    ├── C1: MemoryLayout
-    ├── C2: Estrutura EWVMGenerator + _allocate_symbols
-    ├── C3a/b: IRAssign + IROp (escalares)
-    ├── C3c: IRCJump
-    ├── C3d: IRPrint + IRRead
-    ├── C3e: Arrays (IRLoadArray + IRStoreArray)
-    ├── C3f: Funções intrínsecas (MOD, ABS, SQRT)
-    ├── C4: Integração CLI --stage codegen
-    └── C5: tests/test_codegen.py
-
-4.  Validação end-to-end
+3.  Validação end-to-end
     └── Executar .vm na EWVM; comparar stdout com esperado
 
-5.  Otimizações (valorização)
+4.  Otimizações (valorização)
     ├── O1: Propagação de constantes
     ├── O2: Eliminação de código morto
     └── O3: Eliminação de temporários de uso único

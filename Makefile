@@ -4,7 +4,7 @@ PYTHON ?= python3
 FIXTURE ?= tests/fixtures/hello.f
 FORMAT ?= fixed
 
-.PHONY: help setup setup-recreate lex parse ir test test-lexer test-parser test-ir clean
+.PHONY: help setup setup-recreate lex parse ir codegen test test-lexer test-parser test-ir test-codegen clean
 
 help:
 	@echo "Alvos disponíveis:"
@@ -13,10 +13,12 @@ help:
 	@echo "  make lex FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make parse FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make ir FIXTURE=... [FORMAT=fixed|free]"
+	@echo "  make codegen FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make test                                   # corre toda a suíte de testes"
 	@echo "  make test-lexer                             # corre testes do lexer"
 	@echo "  make test-parser                            # corre testes do parser"
 	@echo "  make test-ir                                # corre testes da IR"
+	@echo "  make test-codegen                           # corre testes do backend EWVM"
 	@echo "  make clean                                  # remove artefactos locais"
 
 .venv/bin/activate:
@@ -42,6 +44,9 @@ parse: .venv/bin/activate
 ir: .venv/bin/activate
 	.venv/bin/python -m src --stage ir --format $(FORMAT) $(FIXTURE)
 
+codegen: .venv/bin/activate
+	.venv/bin/python -m src --stage codegen --format $(FORMAT) $(FIXTURE)
+
 test: .venv/bin/activate
 	.venv/bin/python -m pytest
 
@@ -53,6 +58,9 @@ test-parser: .venv/bin/activate
 
 test-ir: .venv/bin/activate
 	.venv/bin/python -m pytest tests/test_ir.py
+
+test-codegen: .venv/bin/activate
+	.venv/bin/python -m pytest tests/test_codegen.py
 
 clean:
 	rm -rf .pytest_cache

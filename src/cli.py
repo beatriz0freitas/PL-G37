@@ -93,6 +93,34 @@ def run_ir(source: str, filename: str, source_format: str, debug: bool):
     return generator.instructions
 
 
+def run_codegen(source: str, filename: str, source_format: str, debug: bool):
+    _, parser = _build_pipeline(debug=debug)
+    tree = run_parse(
+        source,
+        filename,
+        source_format,
+        debug=False,
+        parser=parser,
+        emit_output=False,
+    )
+
+    from src.codegen.ewvm import EWVMGenerator
+    from src.representacao_intermedia.gerador import IRGenerator
+
+    ir_generator = IRGenerator()
+    ir_generator.generate(tree)
+
+    if debug:
+        print("[codegen] IR (debug):")
+        for instr in ir_generator.instructions:
+            print(f"  {instr}")
+
+    backend = EWVMGenerator.from_program(tree)
+    code = backend.generate(ir_generator.instructions)
+    print(code)
+    return code
+
+
 def main():
     args = parse_args()
 
@@ -122,9 +150,13 @@ def main():
             run_ir(source, args.input, args.source_format, args.debug)
             return
 
-        if args.stage in ("sem", "codegen"):
-            print(f"[ stage '{args.stage}' ainda não implementado ]",
-                  file=sys.stderr)
+        if args.stage == "sem":
+            print("[ stage 'sem' ainda não implementado ]", file=sys.stderr)
+            return
+
+        if args.stage == "codegen":
+            run_codegen(source, args.input, args.source_format, args.debug)
+            return
 
     except CompileError as e:
         print(e, file=sys.stderr)

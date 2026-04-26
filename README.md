@@ -94,6 +94,7 @@ Se imprimir tokens, a instalação está funcional.
 make lex FIXTURE=tests/fixtures/hello.f
 make parse FIXTURE=tests/fixtures/fatorial.f
 make ir FIXTURE=tests/fixtures/primo.f
+make codegen FIXTURE=tests/fixtures/hello.f FORMAT=free
 ```
 
 Com formato explícito:
@@ -124,7 +125,7 @@ python -m src --stage <fase> [--format fixed|free] [--debug] <ficheiro>
 - `--debug`: saída detalhada para depuração
 - `<ficheiro>`: caminho para o `.f`
 
-> Nota: `sem` e `codegen` existem na interface, mas ainda não estão implementados.
+> Nota: `sem` continua pendente. `codegen` já gera código EWVM a partir da IR.
 
 ##### 1) Análise léxica (`--stage lex`)
 
@@ -177,7 +178,23 @@ Uso típico:
 - validar labels e saltos;
 - preparar futura integração com backend EWVM.
 
-##### 4) Formato de fonte (`--format`)
+##### 4) Geração de código EWVM (`--stage codegen`)
+
+Executa lexer + parser + gerador de IR + backend EWVM e imprime o código alvo.
+
+Exemplo:
+
+```bash
+python -m src --stage codegen --format free tests/fixtures/hello.f
+```
+
+Uso típico:
+
+- verificar a tradução final de `PRINT`, `READ`, `IF`, `DO` e `GOTO`;
+- confirmar alocação global (`ALLOC`) e acessos a memória (`PUSHG`/`POPG`);
+- preparar validação end-to-end na VM fornecida pelo docente.
+
+##### 5) Formato de fonte (`--format`)
 
 Por omissão o compilador usa `fixed` (Fortran 77 clássico por colunas).
 Quando o ficheiro está em estilo livre, usa `--format free`.
@@ -211,6 +228,7 @@ Testes por componente:
 make test-lexer
 make test-parser
 make test-ir
+make test-codegen
 ```
 
 Alternativa direta:
@@ -220,6 +238,7 @@ python -m pytest
 python -m pytest tests/test_lexer.py
 python -m pytest tests/test_parser_smoke.py
 python -m pytest tests/test_ir.py
+python -m pytest tests/test_codegen.py
 ```
 
 ---
