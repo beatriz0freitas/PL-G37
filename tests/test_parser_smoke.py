@@ -64,6 +64,19 @@ class TestFixturePrograms:
 		assigns = [s for s in tree.stmts if isinstance(s, ast.AssignStmt)]
 		assert len(assigns) >= 1
 
+	def test_somaarr_nao_lanca_excecao(self, parser):
+		tree = parse_fixture(parser, "somaarr.f")
+		assert isinstance(tree, ast.Program)
+
+	def test_somaarr_tem_read_e_assign(self, parser):
+		tree = parse_fixture(parser, "somaarr.f")
+		assert any(isinstance(s, ast.ReadStmt) for s in tree.stmts)
+		assert any(isinstance(s, ast.AssignStmt) for s in tree.stmts)
+
+	def test_conversor_ainda_nao_e_suportado(self, parser):
+		with pytest.raises(ParseError):
+			parse_fixture(parser, "conversor.f")
+
 
 # ---------------------------------------------------------------------------
 # 2. Nós da AST e estrutura mínima
@@ -158,6 +171,6 @@ class TestParserErrors:
 
 class TestFixtureFiles:
 
-	@pytest.mark.parametrize("fname", ["hello.f", "fatorial.f", "primo.f"])
+	@pytest.mark.parametrize("fname", ["hello.f", "fatorial.f", "primo.f", "somaarr.f", "conversor.f"])
 	def test_fixture_existe(self, fname):
 		assert (FIXTURES / fname).exists()

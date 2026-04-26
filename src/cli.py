@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 from src.config import config
-from src.errors import CompileError
+from src.errors import CompileError, ParseError
 
 
 def parse_args():
@@ -23,9 +23,66 @@ def parse_args():
                    choices=["lex", "parse", "sem", "ir", "codegen"],
                    default="codegen")
     p.add_argument("--format", dest="source_format",
-                   choices=["fixed", "free"], default="fixed")
+                   choices=["fixed", "free", "auto"], default="auto")
     p.add_argument("--debug", action="store_true")
     return p.parse_args()
+
+
+def detect_source_format(source: str) -> str:
+    """Deteta heurísticamente se o ficheiro parece fixed-form ou free-form."""
+
+    fixed_score = 0
+    free_score = 0
+
+    for raw_line in source.splitlines():
+        line = raw_line.rstrip("\n")
+        if not line.strip():
+            continue
+
+        stripped = line.lstrip()
+
+        if stripped.startswith("!") or "&" in line:
+            free_score += 2
+
+        if len(line) >= 6:
+            label_zone = line[:5]
+            cont_col = line[5]
+            if label_zone.strip().isdigit():
+                fixed_score += 3
+            if cont_col not in (" ", "0", "\t") and label_zone.strip() == "":
+                fixed_score += 2
+
+        if line and line[0] in ("C", "c", "*"):
+            fixed_score += 1
+
+    return "fixed" if fixed_score > free_score else "free"
+
+
+def resolve_source_format(source: str, requested: str) -> str:
+    return detect_source_format(source) if requested == "auto" else requested
+
+
+def _alternate_format(source_format: str) -> str:
+    return "free" if source_format == "fixed" else "fixed"
+
+
+def _raise_with_format_hint(
+    parser,
+    source: str,
+    filename: str,
+    source_format: str,
+    err: ParseError,
+) -> None:
+    alternate = _alternate_format(source_format)
+    try:
+        parser.parse(source, filename=filename, source_format=alternate)
+    except CompileError:
+        raise err
+
+    raise ParseError(
+        f"{err.message}. Dica: o ficheiro parece estar em formato {alternate!r}; tenta usar --format {alternate}",
+        err.location,
+    )
 
 
 def _build_pipeline(debug: bool = False):
@@ -57,7 +114,10 @@ def run_parse(
     if parser is None:
         _, parser = _build_pipeline(debug=debug)
 
-    tree = parser.parse(source, filename=filename, source_format=source_format)
+    try:
+        tree = parser.parse(source, filename=filename, source_format=source_format)
+    except ParseError as err:
+        _raise_with_format_hint(parser, source, filename, source_format, err)
 
     if emit_output:
         print(f"[parse] AST criada para programa {tree.name!r}")
@@ -136,18 +196,19 @@ def main():
         sys.exit(1)
 
     source = path.read_text(encoding="utf-8", errors="replace")
+    resolved_format = resolve_source_format(source, args.source_format)
 
     try:
         if args.stage == "lex":
-            run_lex(source, args.input, args.source_format, args.debug)
+            run_lex(source, args.input, resolved_format, args.debug)
             return
 
         if args.stage == "parse":
-            run_parse(source, args.input, args.source_format, args.debug)
+            run_parse(source, args.input, resolved_format, args.debug)
             return
         
         if args.stage == "ir":
-            run_ir(source, args.input, args.source_format, args.debug)
+            run_ir(source, args.input, resolved_format, args.debug)
             return
 
         if args.stage == "sem":
@@ -155,7 +216,7 @@ def main():
             return
 
         if args.stage == "codegen":
-            run_codegen(source, args.input, args.source_format, args.debug)
+            run_codegen(source, args.input, resolved_format, args.debug)
             return
 
     except CompileError as e:

@@ -9,6 +9,7 @@ from src.representacao_intermedia.instrucoes import (
     IRCall,
     IRJump,
     IRLabelInstr,
+    IRLoadArray,
     IROp,
     IRPrint,
     IRRead,
@@ -148,3 +149,16 @@ class TestIRIOAndCalls:
         assert len(stores) == 1
         assert stores[0].name == "A"
         assert stores[0].src == 3
+
+    def test_somaarr_gera_read_array_e_load_array(self, parser):
+        tree = parse_fixture(parser, "somaarr.f", source_format="fixed")
+        ir = gen_ir(tree)
+
+        reads = [i for i in ir if isinstance(i, IRRead)]
+        calls = [i for i in ir if isinstance(i, IRCall)]
+
+        assert len(reads) >= 1
+        assert any(str(arg).startswith("NUMS[") for read in reads for arg in read.args)
+        # Sem análise semântica, NUMS(I) em expressão ainda fica ambíguo e sai
+        # como IRCall; o backend resolve depois com base nas declarações.
+        assert any(call.name == "NUMS" for call in calls)

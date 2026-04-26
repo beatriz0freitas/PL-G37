@@ -115,13 +115,13 @@ make help
 O compilador é executado por fases com:
 
 ```bash
-python -m src --stage <fase> [--format fixed|free] [--debug] <ficheiro>
+python -m src --stage <fase> [--format auto|fixed|free] [--debug] <ficheiro>
 ```
 
 ### Sintaxe dos argumentos
 
 - `--stage`: fase do pipeline (`lex`, `parse`, `ir`, `sem`, `codegen`)
-- `--format`: formato do fonte (`fixed` por omissão, ou `free`)
+- `--format`: formato do fonte (`auto` por omissão, ou `fixed`/`free`)
 - `--debug`: saída detalhada para depuração
 - `<ficheiro>`: caminho para o `.f`
 
@@ -196,8 +196,8 @@ Uso típico:
 
 ##### 5) Formato de fonte (`--format`)
 
-Por omissão o compilador usa `fixed` (Fortran 77 clássico por colunas).
-Quando o ficheiro está em estilo livre, usa `--format free`.
+Por omissão o compilador usa `auto`, com deteção heurística entre `fixed` e `free`.
+Quando quiseres forçar explicitamente um formato, usa `--format fixed` ou `--format free`.
 
 Exemplo (`fixed`, explícito):
 

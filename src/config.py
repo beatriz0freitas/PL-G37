@@ -5,9 +5,10 @@ from dataclasses import dataclass, field
 
 @dataclass
 class Config:
-    # "fixed" = colunas fixas Fortran 77 
-    # "free"  = free-form 
-    source_format: str = "fixed"
+    # "fixed" = colunas fixas Fortran 77
+    # "free"  = free-form
+    # "auto"  = deteção heurística na CLI
+    source_format: str = "auto"
 
     # Fortran 77 é case-insensitive por definição
     case_insensitive: bool = True
@@ -22,7 +23,7 @@ class Config:
     input_file: str = ""
 
     def validate(self):
-        if self.source_format not in ("fixed", "free"):
+        if self.source_format not in ("fixed", "free", "auto"):
             raise ValueError(f"source_format inválido: {self.source_format!r}")
 
 

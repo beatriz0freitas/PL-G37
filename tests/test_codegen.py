@@ -38,8 +38,16 @@ class TestCodegenFatorial:
         assert "ATOI" in code
         assert "STOREG" in code
         assert "MUL" in code
-        assert "DO_TEST" in code
-        assert "JUMP DO_TEST" in code
+        assert "DOTEST" in code
+        assert "JUMP DOTEST" in code
+
+    def test_labels_ewvm_nao_tem_underscores(self, parser):
+        tree = parse_fixture(parser, "fatorial.f", source_format="fixed")
+        code = gen_code(tree)
+
+        assert "DO_TEST" not in code
+        assert "DO_BODY" not in code
+        assert "DO_END" not in code
 
     def test_fatorial_distingue_strings_de_variaveis_no_print(self, parser):
         tree = parse_fixture(parser, "fatorial.f", source_format="fixed")
@@ -81,3 +89,13 @@ class TestCodegenArrays:
         assert "STORE 0" in code
         assert "LOAD 0" in code
         assert "PUSHG" in code
+
+    def test_somaarr_tem_alloc_read_store_e_load_de_array(self, parser):
+        tree = parse_fixture(parser, "somaarr.f", source_format="fixed")
+        code = gen_code(tree)
+
+        assert "ALLOC" in code
+        assert "READ" in code
+        assert "STORE 0" in code
+        assert "LOAD 0" in code
+        assert "WRITEI" in code

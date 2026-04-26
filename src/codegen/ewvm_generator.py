@@ -71,7 +71,12 @@ class EWVMGenerator:
         self.lines.append(" ".join(str(token) for token in tokens))
 
     def emit_label(self, label: Any) -> None:
-        self.lines.append(f"{label}:")
+        self.lines.append(f"{self._label_name(label)}:")
+
+    def _label_name(self, label: Any) -> str:
+        raw = str(label)
+        sanitized = "".join(ch for ch in raw if ch.isalnum())
+        return sanitized or raw
 
     def _allocate_declared_symbols(self) -> None:
         for name in sorted(self.scalar_types):
@@ -207,11 +212,11 @@ class EWVMGenerator:
             case IRLabelInstr(label=label):
                 self.emit_label(label)
             case IRJump(label=label):
-                self.emit("JUMP", label)
+                self.emit("JUMP", self._label_name(label))
             case IRCJump(cond=cond, true_label=true_label, false_label=false_label):
                 self._push_value(cond)
-                self.emit("JZ", false_label)
-                self.emit("JUMP", true_label)
+                self.emit("JZ", self._label_name(false_label))
+                self.emit("JUMP", self._label_name(true_label))
             case IRAssign(dest=dest, src=src):
                 self._push_value(src)
                 self._pop_to(dest)

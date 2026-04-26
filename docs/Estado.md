@@ -170,9 +170,10 @@
 | ------------------------------ | ------------------- |
 | `tests/test_lexer.py`        | ✅ 98/98            |
 | `tests/test_parser_smoke.py` | ✅ 20/20            |
-| `tests/test_ir.py`           | ✅ 7/7              |
-| `tests/test_codegen.py`      | ✅ 5/5              |
-| **Total**                | ✅**130/130** |
+| `tests/test_ir.py`           | ✅ 8/8              |
+| `tests/test_codegen.py`      | ✅ 7/7              |
+| `tests/test_cli.py`          | ✅ 3/3              |
+| **Total**                | ✅**144/144** |
 
 **Fixtures atuais:**
 
@@ -180,6 +181,13 @@
 - `tests/fixtures/fatorial.f`
 - `tests/fixtures/primo.f`
 - `tests/fixtures/continuation.f`
+- `tests/fixtures/somaarr.f`
+- `tests/fixtures/conversor.f`
+
+**Notas sobre as fixtures:**
+
+- `somaarr.f` já está coberto pelo pipeline atual (lexer, parser, IR e codegen).
+- `conversor.f` está incluído por corresponder ao enunciado, mas ainda não é suportado pelo parser atual porque usa `INTEGER FUNCTION ...`.
 
 **Ainda por criar (planeado):**
 
@@ -973,10 +981,11 @@ def eliminate_single_use_temps(instructions: list[IRInstr]) -> list[IRInstr]:
 | ------------------------------ | ------------------------------- |
 | `tests/test_lexer.py`        | ✅ 98/98                        |
 | `tests/test_parser_smoke.py` | ✅ 20/20                        |
-| `tests/test_ir.py`           | ✅ 7/7                          |
-| `tests/test_semantic.py`     | 🔲 Por criar                 |
-| `tests/test_codegen.py`      | ✅ 5/5                       |
-| **Total implementados**  | ✅**130/130**             |
+| `tests/test_ir.py`           | ✅ 8/8                          |
+| `tests/test_semantic.py`     | 🔲 Por criar                    |
+| `tests/test_codegen.py`      | ✅ 7/7                          |
+| `tests/test_cli.py`          | ✅ 3/3                          |
+| **Total implementados**  | ✅**144/144**             |
 
 **Fixtures actuais:**
 
@@ -984,6 +993,8 @@ def eliminate_single_use_temps(instructions: list[IRInstr]) -> list[IRInstr]:
 * `tests/fixtures/fatorial.f` — DO loop, READ, multiplicação
 * `tests/fixtures/primo.f` — GOTO, LOGICAL, MOD, IF-THEN-ELSE aninhado
 * `tests/fixtures/continuation.f` — continuação de linha fixed-form
+* `tests/fixtures/somaarr.f` — arrays, READ indexado e acumulação em ciclo DO
+* `tests/fixtures/conversor.f` — exemplo do enunciado com `INTEGER FUNCTION` (ainda fora do subconjunto suportado)
 
 **Fixtures a criar:**
 

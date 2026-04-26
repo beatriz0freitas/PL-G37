@@ -83,6 +83,27 @@ class TestFixturePrograms:
         assert True  in vals   # .TRUE.
         assert False in vals   # .FALSE.
 
+    def test_somaarr_nao_lanca_excecao(self, lexer):
+        assert len(tokenize(lexer, "somaarr.f")) > 0
+
+    def test_somaarr_tem_array_e_label_30(self, lexer):
+        toks = tokenize(lexer, "somaarr.f")
+        tipos = token_types(toks)
+        labels = [t for t in toks if t.type == "LABEL"]
+
+        assert "READ" in tipos
+        assert "DO" in tipos
+        assert any(lb.value == 30 for lb in labels)
+
+    def test_conversor_lexer_reconhece_function_e_label_20(self, lexer):
+        toks = tokenize(lexer, "conversor.f")
+        tipos = token_types(toks)
+        labels = [t for t in toks if t.type == "LABEL"]
+
+        assert "FUNCTION" in tipos
+        assert "RETURN" in tipos
+        assert any(lb.value == 20 for lb in labels)
+
 
 # ---------------------------------------------------------------------------
 # 2. Palavras-chave 
