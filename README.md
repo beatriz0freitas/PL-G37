@@ -241,6 +241,24 @@ python -m pytest tests/test_ir.py
 python -m pytest tests/test_codegen.py
 ```
 
+### Validação manual na EWVM do docente
+
+Como a EWVM fornecida está disponível através de uma interface web, a validação
+end-to-end é manual.
+
+Exemplo:
+
+```bash
+python -m src --stage codegen --format free tests/fixtures/hello.f > hello.vm
+```
+
+Depois basta:
+
+- abrir `https://ewvm.epl.di.uminho.pt/run`;
+- colar o conteúdo do `.vm` na área de código;
+- carregar em `Run`;
+- comparar o `Output` com o resultado esperado.
+
 ---
 
 **Universidade do Minho 2026 | Escola de Engenharia**

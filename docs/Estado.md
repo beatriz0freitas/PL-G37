@@ -148,6 +148,7 @@
 - [ ] A análise semântica ainda não existe, por isso a distinção `CallExpr` vs `ArrayRef` em expressões é parcialmente resolvida no backend com base nas declarações.
 - [ ] Ainda não há execução automática do `.vm` na VM do docente para validação end-to-end.
 - [ ] Ainda não há symbol table semântica a alimentar o backend; o codegen extrai metadados diretamente da AST.
+- [ ] A validação end-to-end é atualmente manual no site da EWVM do docente.
 
 ---
 

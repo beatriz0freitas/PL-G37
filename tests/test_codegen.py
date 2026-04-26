@@ -30,12 +30,13 @@ class TestCodegenHello:
 
 class TestCodegenFatorial:
 
-    def test_fatorial_tem_alloc_read_mul_e_labels_de_loop(self, parser):
+    def test_fatorial_tem_read_atoi_storeg_mul_e_labels_de_loop(self, parser):
         tree = parse_fixture(parser, "fatorial.f", source_format="fixed")
         code = gen_code(tree)
 
-        assert "ALLOC" in code
         assert "READ" in code
+        assert "ATOI" in code
+        assert "STOREG" in code
         assert "MUL" in code
         assert "DO_TEST" in code
         assert "JUMP DO_TEST" in code
@@ -75,6 +76,8 @@ class TestCodegenArrays:
         tree = parse_str(parser, src, source_format="free", filename="arr_codegen.f")
         code = gen_code(tree)
 
-        assert "STOREN" in code
-        assert "LOADN" in code
         assert "ALLOC" in code
+        assert "STOREG" in code
+        assert "STORE 0" in code
+        assert "LOAD 0" in code
+        assert "PUSHG" in code

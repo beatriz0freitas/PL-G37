@@ -57,8 +57,7 @@ class EWVMGenerator:
         self._allocate_temporaries_and_implicit_scalars(instructions)
 
         self.emit("START")
-        if self.layout.total_cells > 0:
-            self.emit("ALLOC", self.layout.total_cells)
+        self._emit_array_allocations()
 
         for instr in instructions:
             self._translate(instr)
@@ -78,8 +77,16 @@ class EWVMGenerator:
         for name in sorted(self.scalar_types):
             self.layout.allocate_scalar(name)
         for name in sorted(self.array_types):
+            self.layout.allocate_scalar(name)
+
+    def _emit_array_allocations(self) -> None:
+        for name in sorted(self.array_types):
             _, dims = self.array_types[name]
-            self.layout.allocate_array(name, dims)
+            total = 1
+            for dim in dims:
+                total *= dim
+            self.emit("ALLOC", total)
+            self.emit("STOREG", self.layout.addr_of_scalar(name))
 
     def _allocate_temporaries_and_implicit_scalars(self, instructions: list[IRInstr]) -> None:
         for instr in instructions:
@@ -212,6 +219,8 @@ class EWVMGenerator:
                 self._push_value(left)
                 self._push_value(right)
                 self.emit(self._binary_opcode(op, left, right))
+                if op in {"!=", "NEQV"}:
+                    self.emit("NOT")
                 self._pop_to(dest)
             case IRUnaryOp(op=op, dest=dest, operand=operand):
                 self._push_value(operand)
@@ -227,12 +236,12 @@ class EWVMGenerator:
                 self._translate_call(name, args, dest)
             case IRLoadArray(dest=dest, name=name, indices=indices):
                 self._push_array_address(name, indices)
-                self.emit("LOADN")
+                self.emit("LOAD", 0)
                 self._pop_to(dest)
             case IRStoreArray(name=name, indices=indices, src=src):
                 self._push_array_address(name, indices)
                 self._push_value(src)
-                self.emit("STOREN")
+                self.emit("STORE", 0)
             case IRStop():
                 self.emit("STOP")
             case IRReturn():
@@ -256,14 +265,21 @@ class EWVMGenerator:
         for target in args:
             typename = self._type_of(target)
             read_op = "READF" if typename == "REAL" else "READS" if typename == "CHARACTER" else "READ"
-
             if isinstance(target, IRArrayRef):
                 self._push_array_address(target.name, target.indices)
-                self.emit(read_op)
-                self.emit("STOREN")
+                self.emit("READ")
+                if typename == "REAL":
+                    self.emit("ATOF")
+                elif typename != "CHARACTER":
+                    self.emit("ATOI")
+                self.emit("STORE", 0)
                 continue
 
-            self.emit(read_op)
+            self.emit("READ")
+            if typename == "REAL":
+                self.emit("ATOF")
+            elif typename != "CHARACTER":
+                self.emit("ATOI")
             self._pop_to(target)
 
     def _translate_call(self, name: str, args: list[Any], dest: Any | None) -> None:
@@ -271,7 +287,7 @@ class EWVMGenerator:
 
         if upper in self.array_types:
             self._push_array_address(upper, args)
-            self.emit("LOADN")
+            self.emit("LOAD", 0)
             if dest is not None:
                 self._pop_to(dest)
             return
@@ -282,15 +298,19 @@ class EWVMGenerator:
             self.emit("MOD")
         elif upper in {"REAL", "FLOAT", "INT"}:
             self._push_value(args[0])
+            if upper in {"REAL", "FLOAT"} and self._type_of(args[0]) != "REAL":
+                self.emit("ITOF")
+            elif upper == "INT" and self._type_of(args[0]) == "REAL":
+                self.emit("FTOI")
         elif upper in {"ABS", "SQRT", "MAX", "MIN"}:
-            for arg in args:
-                self._push_value(arg)
-            op = {"ABS": "ABS", "SQRT": "SQRT", "MAX": "MAX", "MIN": "MIN"}[upper]
-            self.emit(op)
+            raise NotImplementedError(
+                f"Intrínseca '{upper}' ainda não mapeada para a EWVM documentada"
+            )
         else:
             for arg in args:
                 self._push_value(arg)
-            self.emit("CALL", upper)
+            self.emit("PUSHA", upper)
+            self.emit("CALL")
 
         if dest is not None:
             self._pop_to(dest)
@@ -301,11 +321,20 @@ class EWVMGenerator:
             "<=": "INFEQ",
             ">": "SUP",
             ">=": "SUPEQ",
-            "==": "EQUAL",
-            "!=": "NEQ",
         }
+        real_cmp_ops = {
+            "<": "FINF",
+            "<=": "FINFEQ",
+            ">": "FSUP",
+            ">=": "FSUPEQ",
+        }
+        is_real = "REAL" in {self._type_of(left), self._type_of(right)}
         if op in cmp_ops:
-            return cmp_ops[op]
+            return real_cmp_ops[op] if is_real else cmp_ops[op]
+        if op == "==":
+            return "EQUAL"
+        if op == "!=":
+            return "EQUAL"
         if op == "AND":
             return "AND"
         if op == "OR":
@@ -349,7 +378,7 @@ class EWVMGenerator:
             return
         if isinstance(value, IRArrayRef):
             self._push_array_address(value.name, value.indices)
-            self.emit("LOADN")
+            self.emit("LOAD", 0)
             return
         if isinstance(value, str):
             if self._is_string_literal(value):
@@ -362,16 +391,16 @@ class EWVMGenerator:
 
     def _pop_to(self, target: Any) -> None:
         if isinstance(target, Temp):
-            self.emit("POPG", self.layout.addr_of_scalar(str(target)))
+            self.emit("STOREG", self.layout.addr_of_scalar(str(target)))
             return
         if isinstance(target, str):
-            self.emit("POPG", self.layout.addr_of_scalar(target))
+            self.emit("STOREG", self.layout.addr_of_scalar(target))
             return
         raise NotImplementedError(f"Destino IR sem tradução para POP: {target!r}")
 
     def _push_array_address(self, name: str, indices: list[Any]) -> None:
-        base, dims = self.layout.array_info(name)
-        self.emit("PUSHI", base)
+        _, dims = self.array_types[name]
+        self.emit("PUSHG", self.layout.addr_of_scalar(name))
 
         for idx_num, idx_expr in enumerate(indices):
             self._push_value(idx_expr)
