@@ -4,7 +4,7 @@ import pytest
 
 import src.analise_sintatica.ast_nodes as ast
 from src.errors import SemanticError
-from src.semantic import analyze
+from src.analise_semantica import analyze
 
 
 def analyze_str(parser, code: str, filename: str = "<sem-test>", source_format: str = "free"):

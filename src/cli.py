@@ -184,7 +184,7 @@ def run_codegen(source: str, filename: str, source_format: str, debug: bool):
 
 
 def run_semantic(tree, filename: str, emit_output: bool = True):
-    from src.semantic import analyze
+    from src.analise_semantica import analyze
 
     analyzed = analyze(tree, filename=filename)
     if emit_output:

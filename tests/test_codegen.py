@@ -3,7 +3,7 @@
 from conftest import parse_fixture
 from src.codegen.ewvm import EWVMGenerator
 from src.representacao_intermedia.gerador import IRGenerator
-from src.semantic import analyze
+from src.analise_semantica import analyze
 
 
 def gen_code(tree):
@@ -60,6 +60,21 @@ class TestCodegenFatorial:
         assert 'PUSHS ": "' in code
         assert "PUSHG" in code
         assert "WRITEI" in code
+
+    def test_variaveis_e_temporarios_reservam_slots_globais(self, parser):
+        src = """PROGRAM P
+                 INTEGER X, Y
+                 X = 1
+                 Y = X + 2
+                 PRINT *, Y
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+        lines = code.splitlines()
+
+        assert lines[0] == "START"
+        assert lines[1:4] == ["PUSHI 0", "PUSHI 0", "PUSHI 0"]
+        assert lines[4] == "PUSHI 1"
 
 
 class TestCodegenPrimo:
@@ -133,3 +148,15 @@ class TestCodegenVmCompatibility:
         assert "FNEG" not in code
         assert "SWAP" in code
         assert "SUB" in code
+
+    def test_literal_character_nao_e_confundido_com_variavel_homonima(self, parser):
+        src = """PROGRAM P
+                 CHARACTER X
+                 X = 'valor'
+                 PRINT *, 'X'
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert 'PUSHS "X"' in code
+        assert 'PUSHG 0\nWRITES' not in code

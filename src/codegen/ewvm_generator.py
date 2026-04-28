@@ -22,7 +22,7 @@ from src.representacao_intermedia.instrucoes import (
     IRUnaryOp,
     IRWrite,
 )
-from src.representacao_intermedia.operadores import IRArrayRef, Temp
+from src.representacao_intermedia.operadores import IRArrayRef, IRStringLit, Temp
 
 from .decls import ArrayTypes, ScalarTypes, extract_decl_info
 from .layout import MemoryLayout
@@ -57,6 +57,7 @@ class EWVMGenerator:
         self._allocate_temporaries_and_implicit_scalars(instructions)
 
         self.emit("START")
+        self._emit_global_initialization()
         self._emit_array_allocations()
 
         for instr in instructions:
@@ -92,6 +93,10 @@ class EWVMGenerator:
                 total *= dim
             self.emit("ALLOC", total)
             self.emit("STOREG", self.layout.addr_of_scalar(name))
+
+    def _emit_global_initialization(self) -> None:
+        for _ in range(self.layout.total_cells):
+            self.emit("PUSHI", 0)
 
     def _allocate_temporaries_and_implicit_scalars(self, instructions: list[IRInstr]) -> None:
         for instr in instructions:
@@ -267,7 +272,6 @@ class EWVMGenerator:
     def _translate_read(self, args: list[Any]) -> None:
         for target in args:
             typename = self._type_of(target)
-            read_op = "READF" if typename == "REAL" else "READS" if typename == "CHARACTER" else "READ"
             if isinstance(target, IRArrayRef):
                 self._push_array_address(target.name, target.indices)
                 self.emit("READ")
@@ -389,12 +393,12 @@ class EWVMGenerator:
             self._push_array_address(value.name, value.indices)
             self.emit("LOAD", 0)
             return
+        if isinstance(value, IRStringLit):
+            escaped = value.value.replace("\\", "\\\\").replace('"', '\\"')
+            self.emit(f'PUSHS "{escaped}"')
+            return
         if isinstance(value, str):
-            if self._is_string_literal(value):
-                escaped = value.replace('"', '\\"')
-                self.emit(f'PUSHS "{escaped}"')
-            else:
-                self.emit("PUSHG", self.layout.addr_of_scalar(value))
+            self.emit("PUSHG", self.layout.addr_of_scalar(value))
             return
         raise NotImplementedError(f"Valor IR sem tradução para PUSH: {value!r}")
 
@@ -438,9 +442,9 @@ class EWVMGenerator:
             return self.temp_types.get(str(value), "INTEGER")
         if isinstance(value, IRArrayRef):
             return self.array_types.get(value.name, ("INTEGER", []))[0]
+        if isinstance(value, IRStringLit):
+            return "CHARACTER"
         if isinstance(value, str):
-            if self._is_string_literal(value):
-                return "CHARACTER"
             if value in self.scalar_types:
                 return self.scalar_types[value]
             if value in self.temp_types:
@@ -450,7 +454,7 @@ class EWVMGenerator:
         return "INTEGER"
 
     def _is_string_literal(self, value: Any) -> bool:
-        return isinstance(value, str) and value not in self.scalar_types and value not in self.array_types and value not in self.temp_types
+        return isinstance(value, IRStringLit)
 
     @staticmethod
     def _looks_like_identifier(value: str) -> bool:

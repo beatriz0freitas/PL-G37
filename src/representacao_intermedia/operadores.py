@@ -36,6 +36,17 @@ class IRArrayRef:
         return f"{self.name}[{inner}]"
 
 
+@dataclass(frozen=True)
+class IRStringLit:
+    """Literal CHARACTER na IR, distinto de nomes de variaveis."""
+
+    value: str
+
+    def __str__(self) -> str:
+        escaped = self.value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+
+
 @dataclass
 class LoopContext:
     """Contexto de um DO ativo para fechar no label terminal."""

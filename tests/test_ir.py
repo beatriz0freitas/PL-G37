@@ -15,7 +15,7 @@ from src.representacao_intermedia.instrucoes import (
     IRRead,
     IRStoreArray,
 )
-from src.semantic import analyze
+from src.analise_semantica import analyze
 
 
 def parse_str(parser, code: str, source_format: str = "free", filename: str = "<ir-test>"):

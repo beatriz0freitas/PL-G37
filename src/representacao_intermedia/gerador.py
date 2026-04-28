@@ -21,7 +21,7 @@ from .instrucoes import (
     IRUnaryOp,
     IRWrite,
 )
-from .operadores import IRArrayRef, Label, LoopContext, Temp
+from .operadores import IRArrayRef, IRStringLit, Label, LoopContext, Temp
 
 
 class IRGenerator:
@@ -117,7 +117,7 @@ class IRGenerator:
         return node.value
 
     def visit_StringLit(self, node: ast.StringLit):
-        return node.value
+        return IRStringLit(node.value)
 
     def visit_VarRef(self, node: ast.VarRef):
         return node.name
