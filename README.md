@@ -125,7 +125,7 @@ python -m src --stage <fase> [--format auto|fixed|free] [--debug] <ficheiro>
 - `--debug`: saída detalhada para depuração
 - `<ficheiro>`: caminho para o `.f`
 
-> Nota: `sem` continua pendente. `codegen` já gera código EWVM a partir da IR.
+> Nota: `sem` já executa a análise semântica sobre a AST, e os stages `ir` e `codegen` passam por essa fase antes de gerar saída.
 
 ##### 1) Análise léxica (`--stage lex`)
 
@@ -162,9 +162,25 @@ python -m src --stage parse --debug tests/fixtures/fatorial.f
 
 No modo `--debug`, imprime também a AST para inspeção.
 
-##### 3) Geração de IR (`--stage ir`)
+##### 3) Análise semântica (`--stage sem`)
 
-Executa lexer + parser + gerador de IR e imprime as instruções intermédias.
+Executa lexer + parser + análise semântica e valida a AST anotada.
+
+Exemplo:
+
+```bash
+python -m src --stage sem tests/fixtures/fatorial.f
+```
+
+Uso típico:
+
+- validar declarações, tipos, labels e inicialização;
+- confirmar resolução de `CallExpr` vs `ArrayRef`;
+- inspecionar se o programa passa a fase semântica antes de gerar IR.
+
+##### 4) Geração de IR (`--stage ir`)
+
+Executa lexer + parser + análise semântica + gerador de IR e imprime as instruções intermédias.
 
 Exemplo:
 
@@ -178,9 +194,9 @@ Uso típico:
 - validar labels e saltos;
 - preparar futura integração com backend EWVM.
 
-##### 4) Geração de código EWVM (`--stage codegen`)
+##### 5) Geração de código EWVM (`--stage codegen`)
 
-Executa lexer + parser + gerador de IR + backend EWVM e imprime o código alvo.
+Executa lexer + parser + análise semântica + gerador de IR + backend EWVM e imprime o código alvo.
 
 Exemplo:
 
@@ -194,7 +210,7 @@ Uso típico:
 - confirmar alocação global (`ALLOC`) e acessos a memória (`PUSHG`/`POPG`);
 - preparar validação end-to-end na VM fornecida pelo docente.
 
-##### 5) Formato de fonte (`--format`)
+##### 6) Formato de fonte (`--format`)
 
 Por omissão o compilador usa `auto`, com deteção heurística entre `fixed` e `free`.
 Quando quiseres forçar explicitamente um formato, usa `--format fixed` ou `--format free`.

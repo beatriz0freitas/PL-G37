@@ -98,7 +98,38 @@ class TestCodegenArrays:
         code = gen_code(tree)
 
         assert "ALLOC" in code
+        assert "PADD" in code
         assert "READ" in code
         assert "STORE 0" in code
         assert "LOAD 0" in code
         assert "WRITEI" in code
+
+
+class TestCodegenVmCompatibility:
+
+    def test_neqv_nao_emite_instrucao_neq_inexistente(self, parser):
+        src = """PROGRAM P
+                 LOGICAL A, B
+                 A = .TRUE.
+                 B = .FALSE.
+                 A = A .NEQV. B
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert "NEQ" not in code
+        assert "EQUAL" in code
+        assert "NOT" in code
+
+    def test_unary_minus_nao_depende_de_neg_ou_fneg(self, parser):
+        src = """PROGRAM P
+                 INTEGER X
+                 X = -1
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert " NEG" not in code
+        assert "FNEG" not in code
+        assert "SWAP" in code
+        assert "SUB" in code

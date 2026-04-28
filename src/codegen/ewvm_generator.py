@@ -227,7 +227,7 @@ class EWVMGenerator:
                 self._pop_to(dest)
             case IRUnaryOp(op=op, dest=dest, operand=operand):
                 self._push_value(operand)
-                self.emit(self._unary_opcode(op, operand))
+                self._emit_unary(op, operand)
                 self._pop_to(dest)
             case IRPrint(args=args):
                 self._translate_print(args)
@@ -338,25 +338,38 @@ class EWVMGenerator:
         if op == "EQV":
             return "EQUAL"
         if op == "NEQV":
-            return "NEQ"
+            return "EQUAL"
         if op == "CONCAT":
             return "CONCAT"
+
+        if op == "**":
+            raise NotImplementedError(
+                "Operador '**' ainda não tem mapeamento suportado pela EWVM documentada"
+            )
 
         arithmetic = {
             "+": ("ADD", "FADD"),
             "-": ("SUB", "FSUB"),
             "*": ("MUL", "FMUL"),
             "/": ("DIV", "FDIV"),
-            "**": ("POW", "FPOW"),
         }
         int_op, real_op = arithmetic[op]
         return real_op if "REAL" in {self._type_of(left), self._type_of(right)} else int_op
 
-    def _unary_opcode(self, op: str, operand: Any) -> str:
+    def _emit_unary(self, op: str, operand: Any) -> None:
         if op == "NOT":
-            return "NOT"
+            self.emit("NOT")
+            return
         if op == "NEG":
-            return "FNEG" if self._type_of(operand) == "REAL" else "NEG"
+            if self._type_of(operand) == "REAL":
+                self.emit("PUSHF", 0.0)
+                self.emit("SWAP")
+                self.emit("FSUB")
+            else:
+                self.emit("PUSHI", 0)
+                self.emit("SWAP")
+                self.emit("SUB")
+            return
         raise NotImplementedError(f"Operador unário sem tradução: {op}")
 
     def _push_value(self, value: Any) -> None:
@@ -410,7 +423,9 @@ class EWVMGenerator:
                 self.emit("PUSHI", stride)
                 self.emit("MUL")
 
-            self.emit("ADD")
+            # O valor guardado na variável do array é um apontador devolvido por
+            # ALLOC, por isso o deslocamento tem de usar aritmética de ponteiros.
+            self.emit("PADD")
 
     def _type_of(self, value: Any) -> str:
         if isinstance(value, bool):
