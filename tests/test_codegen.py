@@ -3,9 +3,11 @@
 from conftest import parse_fixture
 from src.codegen.ewvm import EWVMGenerator
 from src.representacao_intermedia.gerador import IRGenerator
+from src.semantic import analyze
 
 
 def gen_code(tree):
+    tree = analyze(tree, filename="<codegen-test>")
     ir_generator = IRGenerator()
     ir_generator.generate(tree)
     backend = EWVMGenerator.from_program(tree)
@@ -13,7 +15,8 @@ def gen_code(tree):
 
 
 def parse_str(parser, code: str, source_format: str = "free", filename: str = "<codegen-test>"):
-    return parser.parse(code, filename=filename, source_format=source_format)
+    tree = parser.parse(code, filename=filename, source_format=source_format)
+    return analyze(tree, filename=filename)
 
 
 class TestCodegenHello:

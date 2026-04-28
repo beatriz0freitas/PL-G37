@@ -15,13 +15,16 @@ from src.representacao_intermedia.instrucoes import (
     IRRead,
     IRStoreArray,
 )
+from src.semantic import analyze
 
 
 def parse_str(parser, code: str, source_format: str = "free", filename: str = "<ir-test>"):
-    return parser.parse(code, filename=filename, source_format=source_format)
+    tree = parser.parse(code, filename=filename, source_format=source_format)
+    return analyze(tree, filename=filename)
 
 
 def gen_ir(tree: ast.Program):
+    tree = analyze(tree, filename="<ir-test>")
     generator = IRGenerator()
     generator.generate(tree)
     return generator.instructions
@@ -32,6 +35,8 @@ class TestIRBasic:
     def test_assign_binop_gera_temporario_e_assign(self, parser):
         src = """PROGRAM P
                  INTEGER A, B, C
+                 B = 1
+                 C = 2
                  A = B + C
                  END
               """
@@ -39,7 +44,7 @@ class TestIRBasic:
         ir = gen_ir(tree)
 
         binops = [i for i in ir if isinstance(i, IROp)]
-        assigns = [i for i in ir if isinstance(i, IRAssign)]
+        assigns = [i for i in ir if isinstance(i, IRAssign) and i.dest == "A"]
 
         assert len(binops) == 1
         assert binops[0].op == "+"
@@ -49,6 +54,7 @@ class TestIRBasic:
     def test_if_else_gera_salto_condicional(self, parser):
         src = """PROGRAM P
                  INTEGER N
+                 N = 1
                  IF (N .GT. 0) THEN
                     N = N - 1
                  ELSE
@@ -94,6 +100,7 @@ class TestIRLabelsAndFlow:
     def test_arith_if_gera_duas_decisoes(self, parser):
         src = """      PROGRAM P
       INTEGER X
+      X = 1
       IF (X) 10, 20, 30
  10   CONTINUE
  20   CONTINUE
@@ -151,14 +158,12 @@ class TestIRIOAndCalls:
         assert stores[0].src == 3
 
     def test_somaarr_gera_read_array_e_load_array(self, parser):
-        tree = parse_fixture(parser, "somaarr.f", source_format="fixed")
+        tree = analyze(parse_fixture(parser, "somaarr.f", source_format="fixed"), filename="somaarr.f")
         ir = gen_ir(tree)
 
         reads = [i for i in ir if isinstance(i, IRRead)]
-        calls = [i for i in ir if isinstance(i, IRCall)]
+        loads = [i for i in ir if isinstance(i, IRLoadArray)]
 
         assert len(reads) >= 1
         assert any(str(arg).startswith("NUMS[") for read in reads for arg in read.args)
-        # Sem análise semântica, NUMS(I) em expressão ainda fica ambíguo e sai
-        # como IRCall; o backend resolve depois com base nas declarações.
-        assert any(call.name == "NUMS" for call in calls)
+        assert any(load.name == "NUMS" for load in loads)

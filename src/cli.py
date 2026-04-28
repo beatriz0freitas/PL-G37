@@ -137,9 +137,10 @@ def run_ir(source: str, filename: str, source_format: str, debug: bool):
         parser=parser,
         emit_output=False,
     )
+    tree = run_semantic(tree, filename, emit_output=False)
 
     if debug:
-        print("[ir] AST (debug):")
+        print("[ir] AST semântica (debug):")
         print(tree)
 
     from src.representacao_intermedia.gerador import IRGenerator
@@ -163,6 +164,7 @@ def run_codegen(source: str, filename: str, source_format: str, debug: bool):
         parser=parser,
         emit_output=False,
     )
+    tree = run_semantic(tree, filename, emit_output=False)
 
     from src.codegen.ewvm import EWVMGenerator
     from src.representacao_intermedia.gerador import IRGenerator
@@ -179,6 +181,17 @@ def run_codegen(source: str, filename: str, source_format: str, debug: bool):
     code = backend.generate(ir_generator.instructions)
     print(code)
     return code
+
+
+def run_semantic(tree, filename: str, emit_output: bool = True):
+    from src.semantic import analyze
+
+    analyzed = analyze(tree, filename=filename)
+    if emit_output:
+        symbol_count = len(getattr(analyzed, "symbol_table", {}))
+        print(f"[sem] análise semântica concluída para programa {analyzed.name!r}")
+        print(f"[sem] símbolos registados: {symbol_count}")
+    return analyzed
 
 
 def main():
@@ -206,13 +219,22 @@ def main():
         if args.stage == "parse":
             run_parse(source, args.input, resolved_format, args.debug)
             return
+
+        if args.stage == "sem":
+            _, parser = _build_pipeline(debug=args.debug)
+            tree = run_parse(
+                source,
+                args.input,
+                resolved_format,
+                debug=False,
+                parser=parser,
+                emit_output=False,
+            )
+            run_semantic(tree, args.input, emit_output=True)
+            return
         
         if args.stage == "ir":
             run_ir(source, args.input, resolved_format, args.debug)
-            return
-
-        if args.stage == "sem":
-            print("[ stage 'sem' ainda não implementado ]", file=sys.stderr)
             return
 
         if args.stage == "codegen":

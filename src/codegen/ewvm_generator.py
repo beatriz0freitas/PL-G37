@@ -195,8 +195,6 @@ class EWVMGenerator:
 
         if isinstance(instr, IRCall) and isinstance(instr.dest, Temp):
             name = instr.name.upper()
-            if name in self.array_types:
-                return str(instr.dest), self.array_types[name][0]
             if name in {"SQRT", "REAL", "FLOAT"}:
                 return str(instr.dest), "REAL"
             if name in {"MOD", "INT"}:
@@ -289,13 +287,6 @@ class EWVMGenerator:
 
     def _translate_call(self, name: str, args: list[Any], dest: Any | None) -> None:
         upper = name.upper()
-
-        if upper in self.array_types:
-            self._push_array_address(upper, args)
-            self.emit("LOAD", 0)
-            if dest is not None:
-                self._pop_to(dest)
-            return
 
         if upper == "MOD":
             self._push_value(args[0])
