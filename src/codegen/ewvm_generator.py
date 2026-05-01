@@ -27,7 +27,7 @@ from src.representacao_intermedia.instrucoes import (
 from src.representacao_intermedia.operadores import IRArrayRef, IRStringLit, Temp
 
 from .decls import ArrayTypes, ScalarTypes, SubprogramInfo, extract_program_decl_info
-from .layout import MemoryLayout
+from .layout import FrameLayout, MemoryLayout
 
 
 class EWVMGenerator:
@@ -47,7 +47,9 @@ class EWVMGenerator:
         self.temp_types: dict[str, str] = {}
         self._backend_label_count = 0
         self._helper_scalars: dict[str, str] = {}
+        self.frame_layouts: dict[str, FrameLayout] = {}
         self._current_subprogram: SubprogramInfo | None = None
+        self._current_frame: FrameLayout | None = None
 
     @classmethod
     def from_program(cls, program: ast.Program) -> "EWVMGenerator":
@@ -64,9 +66,12 @@ class EWVMGenerator:
         self.temp_types = {}
         self._backend_label_count = 0
         self._helper_scalars = {}
+        self.frame_layouts = {}
         self._current_subprogram = None
+        self._current_frame = None
 
         self._allocate_declared_symbols()
+        self._build_frame_layouts()
         self._infer_temp_types(instructions)
         self._reserve_intrinsic_helpers(instructions)
         self._allocate_temporaries_and_implicit_scalars(instructions)
@@ -104,15 +109,37 @@ class EWVMGenerator:
             self.layout.allocate_scalar(name)
         for name in sorted(self.array_types):
             self.layout.allocate_scalar(name)
+
+    def _build_frame_layouts(self) -> None:
+        self.frame_layouts = {}
         for info in self.subprograms.values():
+            param_offsets = {
+                param: idx - len(info.params)
+                for idx, param in enumerate(info.params)
+            }
+            local_offsets: dict[str, int] = {}
+            local_array_offsets: dict[str, int] = {}
+            next_offset = 1
+
             for name in sorted(info.scalar_types):
-                self.layout.allocate_scalar(self._scoped_name(info.name, name))
+                if name in param_offsets:
+                    continue
+                local_offsets[name] = next_offset
+                next_offset += 1
+
             for name in sorted(info.array_types):
-                self.layout.allocate_scalar(self._scoped_name(info.name, name))
-            for param in info.params:
-                self.layout.allocate_scalar(self._param_slot(info.name, param))
-            if info.kind == "function":
-                self.layout.allocate_scalar(self._result_slot(info.name))
+                local_offsets[name] = next_offset
+                local_array_offsets[name] = next_offset
+                next_offset += 1
+
+            self.frame_layouts[info.name] = FrameLayout(
+                name=info.name,
+                kind=info.kind,
+                param_offsets=param_offsets,
+                local_offsets=local_offsets,
+                local_array_offsets=local_array_offsets,
+                result_slot=0,
+            )
 
     def _reserve_intrinsic_helpers(self, instructions: list[IRInstr]) -> None:
         needs_sqrt = any(
@@ -139,14 +166,6 @@ class EWVMGenerator:
                 total *= dim
             self.emit("ALLOC", total)
             self.emit("STOREG", self.layout.addr_of_scalar(name))
-        for info in self.subprograms.values():
-            for name in sorted(info.array_types):
-                _, dims = info.array_types[name]
-                total = 1
-                for dim in dims:
-                    total *= dim
-                self.emit("ALLOC", total)
-                self.emit("STOREG", self.layout.addr_of_scalar(self._scoped_name(info.name, name)))
 
     def _emit_global_initialization(self) -> None:
         for _ in range(self.layout.total_cells):
@@ -154,6 +173,12 @@ class EWVMGenerator:
 
     def _allocate_temporaries_and_implicit_scalars(self, instructions: list[IRInstr]) -> None:
         for instr in instructions:
+            if isinstance(instr, IRProcBegin):
+                self._set_current_subprogram(instr.name)
+                continue
+            if isinstance(instr, IRProcEnd):
+                self._set_current_subprogram(None)
+                continue
             match instr:
                 case IRAssign(dest=dest, src=src):
                     self._ensure_storage(dest)
@@ -172,10 +197,6 @@ class EWVMGenerator:
                         self._ensure_storage(dest)
                     for arg in args:
                         self._scan_value(arg)
-                case IRProcBegin():
-                    continue
-                case IRProcEnd():
-                    continue
                 case IRRead(args=args):
                     for arg in args:
                         if isinstance(arg, IRArrayRef):
@@ -197,6 +218,7 @@ class EWVMGenerator:
                     self._scan_value(src)
                     for idx in indices:
                         self._scan_value(idx)
+        self._set_current_subprogram(None)
 
     def _scan_value(self, value: Any) -> None:
         if isinstance(value, Temp):
@@ -210,11 +232,22 @@ class EWVMGenerator:
 
     def _ensure_storage(self, target: Any) -> None:
         if isinstance(target, Temp):
-            self.layout.allocate_scalar(str(target))
+            self._ensure_named_storage(str(target))
             return
         if isinstance(target, str) and target not in self._active_array_types():
-            self.layout.allocate_scalar(self._storage_name(target))
-            self._active_scalar_types().setdefault(target, self.temp_types.get(target, "INTEGER"))
+            self._ensure_named_storage(target)
+
+    def _ensure_named_storage(self, name: str) -> None:
+        if self._current_frame is not None:
+            if name in self._current_frame.param_offsets or name in self._current_frame.local_offsets:
+                return
+            next_offset = self._current_frame.local_slot_count + 1
+            self._current_frame.local_offsets[name] = next_offset
+            self._active_scalar_types().setdefault(name, self.temp_types.get(name, "INTEGER"))
+            return
+
+        self.layout.allocate_scalar(name)
+        self.scalar_types.setdefault(name, self.temp_types.get(name, "INTEGER"))
 
     def _is_declared_name(self, name: str) -> bool:
         if name in self.scalar_types or name in self.array_types:
@@ -224,11 +257,25 @@ class EWVMGenerator:
                 return True
         return False
 
+    def _set_current_subprogram(self, name: str | None) -> None:
+        if name is None:
+            self._current_subprogram = None
+            self._current_frame = None
+            return
+        self._current_subprogram = self.subprograms[name]
+        self._current_frame = self.frame_layouts[name]
+
     def _infer_temp_types(self, instructions: list[IRInstr]) -> None:
         changed = True
         while changed:
             changed = False
             for instr in instructions:
+                if isinstance(instr, IRProcBegin):
+                    self._set_current_subprogram(instr.name)
+                    continue
+                if isinstance(instr, IRProcEnd):
+                    self._set_current_subprogram(None)
+                    continue
                 inferred = self._infer_instr_type(instr)
                 if inferred is None:
                     continue
@@ -236,6 +283,7 @@ class EWVMGenerator:
                 if self.temp_types.get(name) != typename:
                     self.temp_types[name] = typename
                     changed = True
+        self._set_current_subprogram(None)
 
     def _infer_instr_type(self, instr: IRInstr) -> tuple[str, str] | None:
         if isinstance(instr, IRAssign) and isinstance(instr.dest, Temp):
@@ -316,7 +364,7 @@ class EWVMGenerator:
             case IRProcBegin(name=name):
                 self._translate_proc_begin(name)
             case IRProcEnd():
-                self._current_subprogram = None
+                self._set_current_subprogram(None)
             case IRLoadArray(dest=dest, name=name, indices=indices):
                 self._push_array_address(name, indices)
                 self.emit("LOAD", 0)
@@ -384,34 +432,50 @@ class EWVMGenerator:
             info = self.subprograms.get(upper)
             if info is None:
                 raise NotImplementedError(f"Subprograma sem metadados: {upper}")
-            for param, arg in zip(info.params, args):
+            for arg in args:
                 self._push_value(arg)
-                self.emit("STOREG", self.layout.addr_of_scalar(self._param_slot(upper, param)))
+            self.emit("PUSHI", 0)
             self.emit("PUSHA", upper)
             self.emit("CALL")
-            if dest is not None and info.kind == "function":
-                self.emit("PUSHG", self.layout.addr_of_scalar(self._result_slot(upper)))
 
         if dest is not None:
             self._pop_to(dest)
+            if upper in self.subprograms and args:
+                self.emit("POP", len(args))
+        elif upper in self.subprograms:
+            self.emit("POP", len(args) + 1)
 
     def _translate_proc_begin(self, name: str) -> None:
         info = self.subprograms.get(name)
         if info is None:
             raise NotImplementedError(f"Subprograma sem metadados: {name}")
-        self._current_subprogram = info
+        self._set_current_subprogram(name)
+        frame = self._current_frame
         self.emit_label(name)
-        for param in info.params:
-            self.emit("PUSHG", self.layout.addr_of_scalar(self._param_slot(name, param)))
-            self.emit("STOREG", self.layout.addr_of_scalar(self._scoped_name(name, param)))
+        if frame is not None and frame.local_slot_count:
+            self.emit("PUSHN", frame.local_slot_count)
+        if frame is None:
+            return
+        for array_name, offset in sorted(frame.local_array_offsets.items(), key=lambda item: item[1]):
+            _, dims = info.array_types[array_name]
+            total = 1
+            for dim in dims:
+                total *= dim
+            self.emit("ALLOC", total)
+            self.emit("STOREL", offset)
 
     def _translate_return(self) -> None:
         info = self._current_subprogram
-        if info is None or info.kind != "function":
+        frame = self._current_frame
+        if info is None or frame is None:
             return
-        result_name = info.result_name or info.name
-        self.emit("PUSHG", self.layout.addr_of_scalar(self._scoped_name(info.name, result_name)))
-        self.emit("STOREG", self.layout.addr_of_scalar(self._result_slot(info.name)))
+        if info.kind == "function":
+            result_name = info.result_name or info.name
+            self._push_symbol(result_name)
+            self.emit("STOREL", frame.result_slot)
+        for _, offset in sorted(frame.local_array_offsets.items(), key=lambda item: item[1], reverse=True):
+            self.emit("PUSHL", offset)
+            self.emit("FREE")
 
     def _translate_intrinsic_call(self, name: str, args: list[Any]) -> None:
         if name == "ABS":
@@ -609,7 +673,7 @@ class EWVMGenerator:
             self.emit("PUSHF", value)
             return
         if isinstance(value, Temp):
-            self.emit("PUSHG", self.layout.addr_of_scalar(str(value)))
+            self._push_symbol(str(value))
             return
         if isinstance(value, IRArrayRef):
             self._push_array_address(value.name, value.indices)
@@ -620,22 +684,22 @@ class EWVMGenerator:
             self.emit(f'PUSHS "{escaped}"')
             return
         if isinstance(value, str):
-            self.emit("PUSHG", self.layout.addr_of_scalar(self._storage_name(value)))
+            self._push_symbol(value)
             return
         raise NotImplementedError(f"Valor IR sem tradução para PUSH: {value!r}")
 
     def _pop_to(self, target: Any) -> None:
         if isinstance(target, Temp):
-            self.emit("STOREG", self.layout.addr_of_scalar(str(target)))
+            self._store_symbol(str(target))
             return
         if isinstance(target, str):
-            self.emit("STOREG", self.layout.addr_of_scalar(self._storage_name(target)))
+            self._store_symbol(target)
             return
         raise NotImplementedError(f"Destino IR sem tradução para POP: {target!r}")
 
     def _push_array_address(self, name: str, indices: list[Any]) -> None:
         _, dims = self._active_array_types()[name]
-        self.emit("PUSHG", self.layout.addr_of_scalar(self._storage_name(name)))
+        self._push_symbol(name)
 
         for idx_num, idx_expr in enumerate(indices):
             self._push_value(idx_expr)
@@ -685,23 +749,25 @@ class EWVMGenerator:
             return self._current_subprogram.array_types
         return self.array_types
 
-    def _storage_name(self, name: str) -> str:
-        if self._current_subprogram is not None:
-            if name in self._current_subprogram.scalar_types or name in self._current_subprogram.array_types:
-                return self._scoped_name(self._current_subprogram.name, name)
-        return name
+    def _push_symbol(self, name: str) -> None:
+        if self._current_frame is not None:
+            if name in self._current_frame.param_offsets:
+                self.emit("PUSHL", self._current_frame.param_offsets[name])
+                return
+            if name in self._current_frame.local_offsets:
+                self.emit("PUSHL", self._current_frame.local_offsets[name])
+                return
+        self.emit("PUSHG", self.layout.addr_of_scalar(name))
 
-    @staticmethod
-    def _scoped_name(subprogram: str, name: str) -> str:
-        return f"@{subprogram}.{name}"
-
-    @staticmethod
-    def _param_slot(subprogram: str, name: str) -> str:
-        return f"@ARG.{subprogram}.{name}"
-
-    @staticmethod
-    def _result_slot(subprogram: str) -> str:
-        return f"@RET.{subprogram}"
+    def _store_symbol(self, name: str) -> None:
+        if self._current_frame is not None:
+            if name in self._current_frame.param_offsets:
+                self.emit("STOREL", self._current_frame.param_offsets[name])
+                return
+            if name in self._current_frame.local_offsets:
+                self.emit("STOREL", self._current_frame.local_offsets[name])
+                return
+        self.emit("STOREG", self.layout.addr_of_scalar(name))
 
     def _is_string_literal(self, value: Any) -> bool:
         return isinstance(value, IRStringLit)

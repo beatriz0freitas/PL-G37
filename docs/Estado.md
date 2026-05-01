@@ -141,7 +141,7 @@
 - [X] Suporte a arrays
 - [X] Suporte a intrínsecas base como `MOD`, `INT`, `REAL` e `FLOAT`
 - [X] Convenção de chamada para funções/subrotinas do utilizador
-- [X] Slots reservados para argumentos e valor de retorno
+- [X] Frames de ativação com `FP` para parâmetros, locais e retorno
 - [X] Emissão de labels dedicadas para subprogramas
 
 **Limitações conhecidas:**

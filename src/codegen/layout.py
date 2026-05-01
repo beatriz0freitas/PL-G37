@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass
@@ -43,3 +43,21 @@ class MemoryLayout:
     @property
     def total_cells(self) -> int:
         return self.next_addr
+
+
+@dataclass
+class FrameLayout:
+    """Layout relativo ao FP para um subprograma."""
+
+    name: str
+    kind: str
+    param_offsets: dict[str, int] = field(default_factory=dict)
+    local_offsets: dict[str, int] = field(default_factory=dict)
+    local_array_offsets: dict[str, int] = field(default_factory=dict)
+    result_slot: int = 0
+
+    @property
+    def local_slot_count(self) -> int:
+        if not self.local_offsets:
+            return 0
+        return max(self.local_offsets.values())

@@ -230,9 +230,12 @@ class TestCodegenSubprograms:
         assert "PUSHA CONVRT" in code
         assert "CALL" in code
         assert "CONVRT:" in code
+        assert "PUSHN" in code
+        assert "PUSHL" in code
+        assert "STOREL" in code
         assert "RETURN" in code
 
-    def test_funcao_copia_argumentos_e_publica_retorno(self, parser):
+    def test_funcao_usa_frame_pointer_para_args_locais_e_retorno(self, parser):
         src = """PROGRAM P
                  INTEGER X
                  X = DOBRO(3)
@@ -248,5 +251,9 @@ class TestCodegenSubprograms:
 
         assert "PUSHA DOBRO" in code
         assert "DOBRO:" in code
+        assert "PUSHN" in code
+        assert "PUSHL -1" in code
+        assert "STOREL 0" in code
+        assert "POP 1" in code
         assert code.count("CALL") == 1
         assert code.count("RETURN") >= 1
