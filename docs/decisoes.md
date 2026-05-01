@@ -19,13 +19,13 @@ Fortran 77 source (.f)
         ▼  Análise Sintática (ply.yacc)
       AST
         │
-        ▼  Análise Semântica  [pendente]
+        ▼  Análise Semântica
    AST anotada
         │
         ▼  Geração de IR (three-address code)
       IR
         │
-        ▼  Geração de Código  [pendente]
+        ▼  Geração de Código
    EWVM bytecode / texto
 ```
 
@@ -52,10 +52,16 @@ src/
 │   ├── instrucoes.py    # Instrucoes IR (IRAssign, IROp, IRCJump, ...)
 │   └── operadores.py    # Tipos auxiliares (Temp, Label, LoopContext, ...)
 ├── codegen/
-│   └── ewvm.py          # Backend EWVM [esqueleto — por implementar]
+│   ├── ewvm.py          # API pública do backend EWVM
+│   ├── ewvm_generator.py# Backend principal IR -> EWVM
+│   ├── decls.py         # Extração de metadados semânticos
+│   └── layout.py        # Layout de memória global
 ├── errors.py            # CompileError, LexError, ParseError, SourceLocation
-├── symbols.py           # Tabela de símbolos [esqueleto]
-├── semantic.py          # Análise semântica [esqueleto]
+├── analise_semantica/
+│   ├── analyzer.py      # Análise semântica
+│   ├── symbols.py       # Tabela de símbolos
+│   ├── intrinsics.py    # Assinaturas de intrínsecas
+│   └── types.py         # Conjuntos auxiliares de tipos
 ├── optimizer.py         # Optimizações IR [esqueleto]
 ├── cli.py               # Interface de linha de comando
 ├── config.py            # Configuração global
@@ -65,11 +71,15 @@ tests/
 ├── conftest.py          # Fixtures pytest partilhadas
 ├── test_lexer.py        # 98 testes ao lexer
 ├── test_parser_smoke.py # 20 testes ao parser
-├── test_ir.py           # 7 testes à geração de IR
+├── test_ir.py           # Testes à geração de IR
+├── test_semantic.py     # Testes de análise semântica
+├── test_codegen.py      # Testes do backend EWVM
 └── fixtures/            # Programas Fortran de referência
     ├── hello.f
     ├── fatorial.f
     ├── primo.f
+    ├── somaarr.f
+    ├── conversor.f
     └── continuation.f
 ```
 
@@ -180,7 +190,7 @@ O Fortran 77 tem uma gramática com ambiguidades contextuais que tornam a análi
 A gramática cobre o subconjunto de Fortran 77 definido no enunciado:
 
 ```
-program      : PROGRAM ID body END
+program      : PROGRAM ID body END subprogram_list
 
 body         : decl_list stmt_list
 
@@ -217,6 +227,14 @@ call_stmt    : CALL ID | CALL ID LPAREN arg_list RPAREN
 print_stmt   : PRINT STAR COMMA print_list
 read_stmt    : READ STAR COMMA var_list
 write_stmt   : WRITE LPAREN expr COMMA STAR RPAREN print_list
+
+subprogram_list : ε | subprogram_list subprogram
+subprogram      : function_def | subroutine_def
+function_def    : type_spec FUNCTION ID LPAREN param_list_opt RPAREN body END
+subroutine_def  : SUBROUTINE ID LPAREN param_list_opt RPAREN body END
+                | SUBROUTINE ID body END
+param_list_opt  : ε | param_list
+param_list      : ID | param_list COMMA ID
 
 expr         : expr op expr | MINUS expr | PLUS expr | NOT expr
              | LPAREN expr RPAREN | INT_LIT | REAL_LIT | BOOL_LIT
@@ -286,7 +304,9 @@ Todos os nós da AST são `@dataclass` Python, herdando de `Node`:
 
 ```
 Node
-├── Program          — PROGRAM nome decls stmts END
+├── Program          — PROGRAM nome decls stmts subprograms END
+├── FunctionDef      — tipo FUNCTION nome(params) ... END
+├── SubroutineDef    — SUBROUTINE nome(params) ... END
 ├── TypeDecl         — tipo varlist
 ├── ArrayDecl        — ID(dims)
 ├── Expr
@@ -349,6 +369,8 @@ GOTO L3          (IRJump)
 | `IRJump`       | `GOTO label`                        | Salto incondicional |
 | `IRLabelInstr` | `label:`                            | Marcador de destino |
 | `IRCall`       | `[dest =] CALL name(args)`          | Função/subrotina  |
+| `IRProcBegin`  | `FUNCTION/SUBROUTINE name(params)`  | Início de subprograma |
+| `IRProcEnd`    | `ENDPROC name`                      | Fim de subprograma |
 | `IRLoadArray`  | `dest = A[indices]`                 | Leitura de array    |
 | `IRStoreArray` | `A[indices] = src`                  | Escrita em array    |
 | `IRPrint`      | `PRINT args`                        | Saída              |
@@ -378,6 +400,17 @@ def generate(self, node):
 Cada nó AST tem um `visit_NomeDoNó` correspondente. Isto é o padrão canónico para travessias de AST em compiladores — torna trivial adicionar novos tipos de nó sem modificar o gerador.
 
 **Por quê despacho dinâmico em vez de `match`/`isinstance`?**: O `match` de Python 3.10+ seria uma alternativa válida e ligeiramente mais segura em termos de tipagem, mas o despacho por nome de método é mais extensível (qualquer módulo pode registar um `visit_Foo` sem modificar `IRGenerator`) e é o idioma consagrado em compiladores Python (usado também pelo PLY internamente).
+
+### 5.5 Subprogramas definidos pelo utilizador
+
+O suporte a `FUNCTION` e `SUBROUTINE` foi implementado mantendo a divisão por fases:
+
+- o parser constrói nós próprios (`FunctionDef`, `SubroutineDef`) e mantém-nos fora do corpo do programa principal;
+- a análise semântica regista primeiro as assinaturas globais e só depois analisa cada corpo com uma tabela de símbolos própria;
+- o gerador de IR emite marcadores explícitos `IRProcBegin`/`IRProcEnd`, além de `IRCall` e `IRReturn`;
+- o backend EWVM traduz cada unit para um label dedicado e usa slots reservados para parâmetros e retorno.
+
+Esta opção evita concentrar convenções implícitas num único módulo e permite que parser, semântica, IR e backend evoluam de forma relativamente independente.
 
 ### 5.5 Geração de DO loops
 
@@ -453,10 +486,10 @@ O CLI aceita as seguintes fases via `--stage`:
 | `--stage lex`     | Corre só o lexer e imprime os tokens                   |
 | `--stage parse`   | Corre lexer + parser e imprime resumo da AST            |
 | `--stage ir`      | Corre até à geração de IR e imprime as instruções |
-| `--stage sem`     | Análise semântica [não implementado]                 |
-| `--stage codegen` | Pipeline completo [não implementado]                   |
+| `--stage sem`     | Análise semântica e validação da AST anotada         |
+| `--stage codegen` | Pipeline completo até EWVM                           |
 
-O formato fixo/livre é controlado por `--format fixed|free` (default: `fixed`).
+O formato fixo/livre é controlado por `--format fixed|free|auto` (default: `auto`).
 
 ### 6.3 Configuração global (config.py)
 
@@ -472,13 +505,16 @@ As fixtures de programas Fortran em `tests/fixtures/` servem de casos de teste d
 
 ## 7. Testes e Validação
 
-### Estado actual: 125/125 testes a passar
+### Estado actual: 167/167 testes a passar
 
 | Ficheiro                 | Testes | Cobertura                                                               |
 | ------------------------ | ------ | ----------------------------------------------------------------------- |
 | `test_lexer.py`        | 98     | Tokens, keywords, literais, operadores, fixed/free form, linenos, erros |
-| `test_parser_smoke.py` | 20     | AST shape, declarações, instruções, erros sintáticos, EOF          |
-| `test_ir.py`           | 7      | Atribuições, IFs, DOs, GOTOs, IF aritmético, arrays, I/O, CALLs      |
+| `test_parser_smoke.py` | 20     | AST shape, declarações, instruções, subprogramas, erros sintáticos |
+| `test_semantic.py`     | 13     | Declarações, tipos, labels, arrays, assinaturas e aridade de subprogramas |
+| `test_ir.py`           | 9      | Atribuições, IFs, DOs, GOTOs, arrays, I/O, calls e lowering de subprogramas |
+| `test_codegen.py`      | 9      | Backend EWVM, arrays, intrínsecas e convenção de chamada |
+| `test_cli.py`          | 3      | Execução por estágios via CLI |
 
 ### Fixtures de referência
 
@@ -488,29 +524,34 @@ As fixtures de programas Fortran em `tests/fixtures/` servem de casos de teste d
 | `fatorial.f`     | DO loop clássico com label, CONTINUE, READ, PRINT                    |
 | `primo.f`        | GOTO, LOGICAL, AND, IF-THEN-ELSE aninhado, MOD (função intrínseca) |
 | `continuation.f` | Continuação de linha em fixed-form (`*` na coluna 6)              |
+| `somaarr.f`      | Arrays, READ/WRITE e indexação                                    |
+| `conversor.f`    | `INTEGER FUNCTION`, retorno por nome e chamada definida pelo utilizador |
 
 ---
 
 ## 8. Estado Atual e Trabalho Futuro
 
-### Pendente — Análise Semântica (`src/semantic.py`, `src/symbols.py`)
+### Implementado — Análise Semântica (`src/analise_semantica/analyzer.py`, `src/analise_semantica/symbols.py`)
 
-A análise semântica deve percorrer a AST e:
+A análise semântica já percorre a AST e:
 
-1. **Tabela de símbolos**: registar cada declaração (`TypeDecl`) com nome, tipo, e atributos (array/escalar, dimensões). Fortran 77 suporta *implicit typing* (variáveis começadas por `I–N` são `INTEGER` por omissão) — a implementar como fallback se a variável não estiver declarada.
-2. **Verificação de tipos**: validar operações entre tipos incompatíveis (ex: `LOGICAL + INTEGER`), conversões implícitas (ex: `INTEGER * REAL` → `REAL`).
-3. **Resolução `CallExpr` vs `ArrayRef`**: consultar a tabela de símbolos para determinar se `A(I)` é função ou array e substituir o nó `CallExpr` pelo nó correcto.
-4. **Validação de labels DO**: verificar que para cada `DO label ...` existe exactamente um `label CONTINUE` no mesmo nível de bloco.
-5. **Anotação da AST**: adicionar informação de tipo a cada nó `Expr` para que o gerador de código possa emitir instruções tipadas correctamente.
+1. regista declarações de escalares e arrays;
+2. valida tipos em atribuições e expressões;
+3. resolve `CallExpr` vs `ArrayRef`;
+4. valida labels de `GOTO` e `DO`;
+5. anota expressões com `sem_type`;
+6. regista assinaturas de `FUNCTION`/`SUBROUTINE` antes da análise dos corpos;
+7. analisa cada subprograma com escopo próprio e valida aridade das chamadas.
 
-### Pendente — Geração de Código EWVM (`src/codegen/ewvm.py`)
+### Implementado — Geração de Código EWVM (`src/codegen/ewvm_generator.py`)
 
-O backend deve mapear cada instrução IR para as instruções da EWVM:
+O backend já mapeia a IR para EWVM, incluindo:
 
-- Gestão da stack de operandos
-- Modelo de memória (variáveis locais vs globais, arrays)
-- Convenção de chamada para `CALL` e `RETURN`
-- Instrução de I/O (`PRINT`, `READ`, `WRITE`)
+- gestão da stack de operandos;
+- modelo de memória global para escalares, arrays, temporários e auxiliares;
+- intrínsecas suportadas (`MOD`, `INT`, `REAL`, `FLOAT`, `ABS`, `SQRT`, `MAX`, `MIN`);
+- convenção explícita de chamada para subprogramas definidos pelo utilizador;
+- emissão de labels, `CALL` e `RETURN`.
 
 ### Pendente — Optimizações (`src/optimizer.py`)
 
@@ -544,12 +585,12 @@ Optimizações clássicas sobre a IR (valorização):
 
 Para evitar sobredeclaração de suporte, ficam explícitos os limites observados no código atual:
 
-1. **Sem subprogramas definidos pelo utilizador** (`FUNCTION`/`SUBROUTINE` como definições ainda não têm produções no parser).
-2. **`CALL` e `CallExpr` existem apenas como forma sintática/IR**, sem resolução semântica de assinaturas.
-3. **`WRITE` suportado no formato reduzido** `WRITE (unit, *) ...` no parser atual.
-4. **Sem `IMPLICIT NONE` efetivo** (token reconhecido, mas sem regra semântica aplicada).
-5. **Sem tipagem/checagem de coerção** na fase semântica (logo, o parser aceita combinações que podem ser inválidas semanticamente).
-6. **Sem backend executável EWVM**, logo ainda não há validação end-to-end de saída da VM.
+1. **Sem `IMPLICIT NONE` efetivo** (token reconhecido, mas sem regra semântica aplicada).
+2. **Sem coerções implícitas gerais** na fase semântica; a validação atual privilegia compatibilidade estrita entre tipos.
+3. **Sem otimização IR/EWVM**: o código gerado ainda reserva e inicializa mais slots do que o necessário.
+4. **Sem execução automática da VM do docente** no pipeline de testes.
+5. **Convenção de chamada ainda simples**: parâmetros e retorno são materializados em slots globais auxiliares, sem frames de ativação reais.
+6. **Sem procedimentos internos nem argumentos por referência completos**; o suporte atual cobre subprogramas externos do subconjunto usado no projeto.
 
 ---
 
@@ -557,14 +598,14 @@ Para evitar sobredeclaração de suporte, ficam explícitos os limites observado
 
 Definição prática de “done” para a versão de entrega:
 
-1. `semantic.py` + `symbols.py` com:
+1. `src/analise_semantica/analyzer.py` + `src/analise_semantica/symbols.py` com:
 
 - deteção de variável não declarada;
 - deteção de declaração duplicada;
 - validação de tipos em `AssignStmt`, `BinOp`, `UnaryOp`;
 - validação estrutural de labels de `DO`.
 
-2. `codegen/ewvm.py` a traduzir **todo o conjunto de instruções IR já emitidas**.
+2. `src/codegen/ewvm_generator.py` a traduzir **todo o conjunto de instruções IR já emitidas**.
 3. Testes novos:
 
 - `tests/test_semantic.py`;

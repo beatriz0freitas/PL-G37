@@ -15,7 +15,7 @@
 | Representação Intermédia (AST -> IR)    | ✅ Implementada |
 | Tradução de Código (IR -> EWVM)         | ✅ Implementada |
 | Otimização (valorização)                | 🔲 Em falta     |
-| Testes                                  | ✅ 161/161      |
+| Testes                                  | ✅ 167/167      |
 
 ---
 
@@ -54,7 +54,9 @@
 - [X] `DO`, `GOTO`, `CONTINUE`
 - [X] `READ`, `PRINT`, `WRITE`
 - [X] `CALL`, `STOP`, `RETURN`
+- [X] Definições externas `FUNCTION` e `SUBROUTINE`
 - [X] AST com `lineno` e `source_label`
+- [X] Separação entre programa principal e subprogramas externos
 
 **Validação:**
 
@@ -64,7 +66,7 @@
 
 ## ✅ Análise Semântica
 
-**Ficheiros:** `src/semantic.py`, `src/symbols.py`
+**Ficheiros:** `src/analise_semantica/analyzer.py`, `src/analise_semantica/symbols.py`
 
 **Implementado:**
 
@@ -76,13 +78,17 @@
 - [X] Validação de labels em `GOTO` e `DO ... CONTINUE`
 - [X] Anotação da AST com `sem_type` e símbolo associado
 - [X] Resolução da ambiguidade `CallExpr` vs `ArrayRef`
+- [X] Registo prévio de assinaturas de `FUNCTION` e `SUBROUTINE`
+- [X] Validação de aridade e distinção função vs subrotina
+- [X] Escopo semântico próprio por subprograma
+- [X] Suporte ao retorno de função via atribuição ao nome da função
 - [X] Stage `--stage sem` na CLI
 
 **Notas:**
 
 - [X] O pipeline `ir` e `codegen` passa obrigatoriamente pela análise semântica.
 - [X] A heurística temporária no backend EWVM para distinguir arrays de chamadas deixou de ser necessária.
-- [ ] Ainda não há suporte completo a funções/subprogramas definidos pelo utilizador.
+- [X] O `conversor.f` já faz parte do subconjunto aceite.
 
 **Validação:**
 
@@ -107,6 +113,8 @@
 - [X] `READ`, `PRINT`, `WRITE`
 - [X] `CALL`, `STOP`, `RETURN`
 - [X] Leitura/escrita de arrays na IR
+- [X] Marcadores explícitos de início/fim de subprograma
+- [X] Lowering de funções e subrotinas definidas pelo utilizador
 
 **Validação:**
 
@@ -132,6 +140,9 @@
 - [X] `READ`, `PRINT`, `WRITE`
 - [X] Suporte a arrays
 - [X] Suporte a intrínsecas base como `MOD`, `INT`, `REAL` e `FLOAT`
+- [X] Convenção de chamada para funções/subrotinas do utilizador
+- [X] Slots reservados para argumentos e valor de retorno
+- [X] Emissão de labels dedicadas para subprogramas
 
 **Limitações conhecidas:**
 
@@ -163,11 +174,11 @@
 | ------------------------- | --------- |
 | `tests/test_lexer.py`     | ✅ 98/98  |
 | `tests/test_parser_smoke.py` | ✅ 20/20 |
-| `tests/test_semantic.py`  | ✅ 10/10  |
-| `tests/test_ir.py`        | ✅ 8/8    |
-| `tests/test_codegen.py`   | ✅ 7/7    |
+| `tests/test_semantic.py`  | ✅ 13/13  |
+| `tests/test_ir.py`        | ✅ 9/9    |
+| `tests/test_codegen.py`   | ✅ 9/9    |
 | `tests/test_cli.py`       | ✅ 3/3    |
-| **Total**                 | ✅ 154/154 |
+| **Total**                 | ✅ 167/167 |
 
 ---
 
@@ -177,4 +188,4 @@ O pipeline funcional atual é:
 
 `lexer -> parser -> semantic -> IR -> EWVM`
 
-Neste momento, a única etapa estruturalmente em falta é a otimização. O parser ainda não suporta casos como `INTEGER FUNCTION ...`, por isso fixtures como `conversor.f` continuam fora do subconjunto aceite.
+Neste momento, a única etapa estruturalmente em falta é a otimização. O pipeline já suporta definições externas `FUNCTION`/`SUBROUTINE`, incluindo análise semântica por escopo, lowering para IR e geração EWVM com convenção explícita de chamada. A fixture `conversor.f` já é aceite e testada de ponta a ponta.
