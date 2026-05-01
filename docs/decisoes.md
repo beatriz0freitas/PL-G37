@@ -408,7 +408,7 @@ O suporte a `FUNCTION` e `SUBROUTINE` foi implementado mantendo a divisão por f
 - o parser constrói nós próprios (`FunctionDef`, `SubroutineDef`) e mantém-nos fora do corpo do programa principal;
 - a análise semântica regista primeiro as assinaturas globais e só depois analisa cada corpo com uma tabela de símbolos própria;
 - o gerador de IR emite marcadores explícitos `IRProcBegin`/`IRProcEnd`, além de `IRCall` e `IRReturn`;
-- o backend EWVM traduz cada unit para um label dedicado e usa slots reservados para parâmetros e retorno.
+- o backend EWVM traduz cada unit para um label dedicado e usa `FP` para separar parâmetros, locais e valor de retorno por ativação.
 
 Esta opção evita concentrar convenções implícitas num único módulo e permite que parser, semântica, IR e backend evoluam de forma relativamente independente.
 
@@ -589,8 +589,8 @@ Para evitar sobredeclaração de suporte, ficam explícitos os limites observado
 2. **Sem coerções implícitas gerais** na fase semântica; a validação atual privilegia compatibilidade estrita entre tipos.
 3. **Sem otimização IR/EWVM**: o código gerado ainda reserva e inicializa mais slots do que o necessário.
 4. **Sem execução automática da VM do docente** no pipeline de testes.
-5. **Convenção de chamada ainda simples**: parâmetros e retorno são materializados em slots globais auxiliares, sem frames de ativação reais.
-6. **Sem procedimentos internos nem argumentos por referência completos**; o suporte atual cobre subprogramas externos do subconjunto usado no projeto.
+5. **Sem procedimentos internos nem argumentos por referência completos**; o suporte atual cobre subprogramas externos do subconjunto usado no projeto.
+6. **Sem otimização específica de frames**: o backend já usa `FP`, mas ainda não minimiza slots locais/temporários nem faz compactação de ativação.
 
 ---
 
