@@ -94,6 +94,32 @@ class IRCall(IRInstr):
 
 
 @dataclass
+class IRProcBegin(IRInstr):
+    """Inicio de funcao/subrotina."""
+
+    name: str
+    params: list[str]
+    kind: str
+    result_name: Optional[str] = None
+
+    def __str__(self) -> str:
+        rendered_params = ", ".join(self.params)
+        if self.kind == "function":
+            return f"FUNCTION {self.name}({rendered_params})"
+        return f"SUBROUTINE {self.name}({rendered_params})"
+
+
+@dataclass
+class IRProcEnd(IRInstr):
+    """Fim de funcao/subrotina."""
+
+    name: str
+
+    def __str__(self) -> str:
+        return f"ENDPROC {self.name}"
+
+
+@dataclass
 class IRLoadArray(IRInstr):
     """Leitura de array: dest = A[idx...]."""
 

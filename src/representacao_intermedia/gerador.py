@@ -14,6 +14,8 @@ from .instrucoes import (
     IRLoadArray,
     IROp,
     IRPrint,
+    IRProcBegin,
+    IRProcEnd,
     IRRead,
     IRReturn,
     IRStop,
@@ -96,10 +98,39 @@ class IRGenerator:
 
     def visit_Program(self, node: ast.Program) -> list[IRInstr]:
         self._visit_stmt_sequence(node.stmts)
+        if not self.instructions or not isinstance(self.instructions[-1], IRStop):
+            self.emit(IRStop())
+
+        for subprogram in node.subprograms:
+            self.generate(subprogram)
+
         if self._loop_stack:
             pending = ", ".join(str(ctx.target_label) for ctx in self._loop_stack)
             raise ValueError(f"DO sem label terminal CONTINUE para label(s): {pending}")
         return self.instructions
+
+    def visit_FunctionDef(self, node: ast.FunctionDef):
+        self.emit(
+            IRProcBegin(
+                name=node.name,
+                params=node.params,
+                kind="function",
+                result_name=getattr(node, "result_name", node.name),
+            )
+        )
+        self._visit_stmt_sequence(node.stmts)
+        if not node.stmts or not isinstance(node.stmts[-1], ast.ReturnStmt):
+            self.emit(IRReturn())
+        self.emit(IRProcEnd(node.name))
+        return None
+
+    def visit_SubroutineDef(self, node: ast.SubroutineDef):
+        self.emit(IRProcBegin(name=node.name, params=node.params, kind="subroutine"))
+        self._visit_stmt_sequence(node.stmts)
+        if not node.stmts or not isinstance(node.stmts[-1], ast.ReturnStmt):
+            self.emit(IRReturn())
+        self.emit(IRProcEnd(node.name))
+        return None
 
     def visit_TypeDecl(self, node: ast.TypeDecl):
         return None

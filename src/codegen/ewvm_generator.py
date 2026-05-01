@@ -15,6 +15,8 @@ from src.representacao_intermedia.instrucoes import (
     IRLoadArray,
     IROp,
     IRPrint,
+    IRProcBegin,
+    IRProcEnd,
     IRRead,
     IRReturn,
     IRStop,
@@ -24,7 +26,7 @@ from src.representacao_intermedia.instrucoes import (
 )
 from src.representacao_intermedia.operadores import IRArrayRef, IRStringLit, Temp
 
-from .decls import ArrayTypes, ScalarTypes, extract_decl_info
+from .decls import ArrayTypes, ScalarTypes, SubprogramInfo, extract_program_decl_info
 from .layout import MemoryLayout
 
 
@@ -35,19 +37,26 @@ class EWVMGenerator:
         self,
         scalar_types: ScalarTypes | None = None,
         array_types: ArrayTypes | None = None,
+        subprograms: dict[str, SubprogramInfo] | None = None,
     ):
         self.scalar_types = dict(scalar_types or {})
         self.array_types = dict(array_types or {})
+        self.subprograms = dict(subprograms or {})
         self.layout = MemoryLayout()
         self.lines: list[str] = []
         self.temp_types: dict[str, str] = {}
         self._backend_label_count = 0
         self._helper_scalars: dict[str, str] = {}
+        self._current_subprogram: SubprogramInfo | None = None
 
     @classmethod
     def from_program(cls, program: ast.Program) -> "EWVMGenerator":
-        scalar_types, array_types = extract_decl_info(program)
-        return cls(scalar_types=scalar_types, array_types=array_types)
+        info = extract_program_decl_info(program)
+        return cls(
+            scalar_types=info.scalar_types,
+            array_types=info.array_types,
+            subprograms=info.subprograms,
+        )
 
     def generate(self, instructions: list[IRInstr]) -> str:
         self.lines = []
@@ -55,6 +64,7 @@ class EWVMGenerator:
         self.temp_types = {}
         self._backend_label_count = 0
         self._helper_scalars = {}
+        self._current_subprogram = None
 
         self._allocate_declared_symbols()
         self._infer_temp_types(instructions)
@@ -68,7 +78,8 @@ class EWVMGenerator:
         for instr in instructions:
             self._translate(instr)
 
-        if not instructions or not isinstance(instructions[-1], IRStop):
+        has_subprograms = any(isinstance(instr, IRProcBegin) for instr in instructions)
+        if not has_subprograms and (not instructions or not isinstance(instructions[-1], IRStop)):
             self.emit("STOP")
 
         return "\n".join(self.lines)
@@ -93,6 +104,15 @@ class EWVMGenerator:
             self.layout.allocate_scalar(name)
         for name in sorted(self.array_types):
             self.layout.allocate_scalar(name)
+        for info in self.subprograms.values():
+            for name in sorted(info.scalar_types):
+                self.layout.allocate_scalar(self._scoped_name(info.name, name))
+            for name in sorted(info.array_types):
+                self.layout.allocate_scalar(self._scoped_name(info.name, name))
+            for param in info.params:
+                self.layout.allocate_scalar(self._param_slot(info.name, param))
+            if info.kind == "function":
+                self.layout.allocate_scalar(self._result_slot(info.name))
 
     def _reserve_intrinsic_helpers(self, instructions: list[IRInstr]) -> None:
         needs_sqrt = any(
@@ -119,6 +139,14 @@ class EWVMGenerator:
                 total *= dim
             self.emit("ALLOC", total)
             self.emit("STOREG", self.layout.addr_of_scalar(name))
+        for info in self.subprograms.values():
+            for name in sorted(info.array_types):
+                _, dims = info.array_types[name]
+                total = 1
+                for dim in dims:
+                    total *= dim
+                self.emit("ALLOC", total)
+                self.emit("STOREG", self.layout.addr_of_scalar(self._scoped_name(info.name, name)))
 
     def _emit_global_initialization(self) -> None:
         for _ in range(self.layout.total_cells):
@@ -144,6 +172,10 @@ class EWVMGenerator:
                         self._ensure_storage(dest)
                     for arg in args:
                         self._scan_value(arg)
+                case IRProcBegin():
+                    continue
+                case IRProcEnd():
+                    continue
                 case IRRead(args=args):
                     for arg in args:
                         if isinstance(arg, IRArrayRef):
@@ -173,15 +205,24 @@ class EWVMGenerator:
             for idx in value.indices:
                 self._scan_value(idx)
         elif isinstance(value, str) and self._looks_like_identifier(value) and not self._is_string_literal(value):
-            self._ensure_storage(value)
+            if not self._is_declared_name(value):
+                self._ensure_storage(value)
 
     def _ensure_storage(self, target: Any) -> None:
         if isinstance(target, Temp):
             self.layout.allocate_scalar(str(target))
             return
-        if isinstance(target, str) and target not in self.array_types:
-            self.layout.allocate_scalar(target)
-            self.scalar_types.setdefault(target, self.temp_types.get(target, "INTEGER"))
+        if isinstance(target, str) and target not in self._active_array_types():
+            self.layout.allocate_scalar(self._storage_name(target))
+            self._active_scalar_types().setdefault(target, self.temp_types.get(target, "INTEGER"))
+
+    def _is_declared_name(self, name: str) -> bool:
+        if name in self.scalar_types or name in self.array_types:
+            return True
+        for info in self.subprograms.values():
+            if name in info.scalar_types or name in info.array_types:
+                return True
+        return False
 
     def _infer_temp_types(self, instructions: list[IRInstr]) -> None:
         changed = True
@@ -201,7 +242,7 @@ class EWVMGenerator:
             return str(instr.dest), self._type_of(instr.src)
 
         if isinstance(instr, IRLoadArray):
-            array_type, _ = self.array_types[instr.name]
+            array_type, _ = self._active_array_types()[instr.name]
             return str(instr.dest), array_type
 
         if isinstance(instr, IRUnaryOp):
@@ -232,6 +273,10 @@ class EWVMGenerator:
                 return str(instr.dest), "INTEGER"
             if name in {"ABS", "MAX", "MIN"} and instr.args:
                 return str(instr.dest), self._type_of(instr.args[0])
+            if name in self.subprograms:
+                info = self.subprograms[name]
+                result_name = info.result_name or name
+                return str(instr.dest), info.scalar_types.get(result_name, "INTEGER")
             return str(instr.dest), "INTEGER"
 
         return None
@@ -268,6 +313,10 @@ class EWVMGenerator:
                 self._translate_read(args)
             case IRCall(name=name, args=args, dest=dest):
                 self._translate_call(name, args, dest)
+            case IRProcBegin(name=name):
+                self._translate_proc_begin(name)
+            case IRProcEnd():
+                self._current_subprogram = None
             case IRLoadArray(dest=dest, name=name, indices=indices):
                 self._push_array_address(name, indices)
                 self.emit("LOAD", 0)
@@ -279,6 +328,7 @@ class EWVMGenerator:
             case IRStop():
                 self.emit("STOP")
             case IRReturn():
+                self._translate_return()
                 self.emit("RETURN")
             case _:
                 raise NotImplementedError(f"Instrução IR sem tradução: {type(instr).__name__}")
@@ -331,13 +381,37 @@ class EWVMGenerator:
         elif upper in {"ABS", "SQRT", "MAX", "MIN"}:
             self._translate_intrinsic_call(upper, args)
         else:
-            for arg in args:
+            info = self.subprograms.get(upper)
+            if info is None:
+                raise NotImplementedError(f"Subprograma sem metadados: {upper}")
+            for param, arg in zip(info.params, args):
                 self._push_value(arg)
+                self.emit("STOREG", self.layout.addr_of_scalar(self._param_slot(upper, param)))
             self.emit("PUSHA", upper)
             self.emit("CALL")
+            if dest is not None and info.kind == "function":
+                self.emit("PUSHG", self.layout.addr_of_scalar(self._result_slot(upper)))
 
         if dest is not None:
             self._pop_to(dest)
+
+    def _translate_proc_begin(self, name: str) -> None:
+        info = self.subprograms.get(name)
+        if info is None:
+            raise NotImplementedError(f"Subprograma sem metadados: {name}")
+        self._current_subprogram = info
+        self.emit_label(name)
+        for param in info.params:
+            self.emit("PUSHG", self.layout.addr_of_scalar(self._param_slot(name, param)))
+            self.emit("STOREG", self.layout.addr_of_scalar(self._scoped_name(name, param)))
+
+    def _translate_return(self) -> None:
+        info = self._current_subprogram
+        if info is None or info.kind != "function":
+            return
+        result_name = info.result_name or info.name
+        self.emit("PUSHG", self.layout.addr_of_scalar(self._scoped_name(info.name, result_name)))
+        self.emit("STOREG", self.layout.addr_of_scalar(self._result_slot(info.name)))
 
     def _translate_intrinsic_call(self, name: str, args: list[Any]) -> None:
         if name == "ABS":
@@ -546,7 +620,7 @@ class EWVMGenerator:
             self.emit(f'PUSHS "{escaped}"')
             return
         if isinstance(value, str):
-            self.emit("PUSHG", self.layout.addr_of_scalar(value))
+            self.emit("PUSHG", self.layout.addr_of_scalar(self._storage_name(value)))
             return
         raise NotImplementedError(f"Valor IR sem tradução para PUSH: {value!r}")
 
@@ -555,13 +629,13 @@ class EWVMGenerator:
             self.emit("STOREG", self.layout.addr_of_scalar(str(target)))
             return
         if isinstance(target, str):
-            self.emit("STOREG", self.layout.addr_of_scalar(target))
+            self.emit("STOREG", self.layout.addr_of_scalar(self._storage_name(target)))
             return
         raise NotImplementedError(f"Destino IR sem tradução para POP: {target!r}")
 
     def _push_array_address(self, name: str, indices: list[Any]) -> None:
-        _, dims = self.array_types[name]
-        self.emit("PUSHG", self.layout.addr_of_scalar(name))
+        _, dims = self._active_array_types()[name]
+        self.emit("PUSHG", self.layout.addr_of_scalar(self._storage_name(name)))
 
         for idx_num, idx_expr in enumerate(indices):
             self._push_value(idx_expr)
@@ -589,17 +663,45 @@ class EWVMGenerator:
         if isinstance(value, Temp):
             return self.temp_types.get(str(value), "INTEGER")
         if isinstance(value, IRArrayRef):
-            return self.array_types.get(value.name, ("INTEGER", []))[0]
+            return self._active_array_types().get(value.name, ("INTEGER", []))[0]
         if isinstance(value, IRStringLit):
             return "CHARACTER"
         if isinstance(value, str):
-            if value in self.scalar_types:
-                return self.scalar_types[value]
+            if value in self._active_scalar_types():
+                return self._active_scalar_types()[value]
             if value in self.temp_types:
                 return self.temp_types[value]
-            if value in self.array_types:
-                return self.array_types[value][0]
+            if value in self._active_array_types():
+                return self._active_array_types()[value][0]
         return "INTEGER"
+
+    def _active_scalar_types(self) -> ScalarTypes:
+        if self._current_subprogram is not None:
+            return self._current_subprogram.scalar_types
+        return self.scalar_types
+
+    def _active_array_types(self) -> ArrayTypes:
+        if self._current_subprogram is not None:
+            return self._current_subprogram.array_types
+        return self.array_types
+
+    def _storage_name(self, name: str) -> str:
+        if self._current_subprogram is not None:
+            if name in self._current_subprogram.scalar_types or name in self._current_subprogram.array_types:
+                return self._scoped_name(self._current_subprogram.name, name)
+        return name
+
+    @staticmethod
+    def _scoped_name(subprogram: str, name: str) -> str:
+        return f"@{subprogram}.{name}"
+
+    @staticmethod
+    def _param_slot(subprogram: str, name: str) -> str:
+        return f"@ARG.{subprogram}.{name}"
+
+    @staticmethod
+    def _result_slot(subprogram: str) -> str:
+        return f"@RET.{subprogram}"
 
     def _is_string_literal(self, value: Any) -> bool:
         return isinstance(value, IRStringLit)

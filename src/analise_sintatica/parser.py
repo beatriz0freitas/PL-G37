@@ -79,9 +79,15 @@ class Fortran77Parser:
 
     # Ponto de entrada
     def p_program(self, p):
-        """program : PROGRAM ID body END"""
+        """program : PROGRAM ID body END subprogram_list"""
         decls, stmts = p[3]
-        p[0] = ast.Program(name=p[2], decls=decls, stmts=stmts, lineno=p.lineno(1))
+        p[0] = ast.Program(
+            name=p[2],
+            decls=decls,
+            stmts=stmts,
+            subprograms=p[5],
+            lineno=p.lineno(1),
+        )
 
     # body agrupa declarações (antes) e instruções (depois)
     def p_body(self, p):
@@ -98,16 +104,19 @@ class Fortran77Parser:
         p[0] = p[1] + [p[2]]
 
     def p_decl_type(self, p):
-        """decl : INTEGER var_decl_list
-               | REAL    var_decl_list
-               | LOGICAL var_decl_list
-               | CHARACTER var_decl_list
-               | DOUBLE PRECISION var_decl_list"""
-        if len(p) == 3:
-            p[0] = ast.TypeDecl(typename=p[1], variables=p[2], lineno=p.lineno(1))
-        else:
-            # DOUBLE PRECISION
-            p[0] = ast.TypeDecl(typename="DOUBLE PRECISION", variables=p[3], lineno=p.lineno(1))
+        """decl : type_spec var_decl_list"""
+        p[0] = ast.TypeDecl(typename=p[1], variables=p[2], lineno=p.lineno(1))
+
+    def p_type_spec(self, p):
+        """type_spec : INTEGER
+                     | REAL
+                     | LOGICAL
+                     | CHARACTER"""
+        p[0] = p[1]
+
+    def p_type_spec_double(self, p):
+        """type_spec : DOUBLE PRECISION"""
+        p[0] = "DOUBLE PRECISION"
 
     def p_var_decl_list_single(self, p):
         """var_decl_list : var_decl"""
@@ -420,6 +429,70 @@ class Fortran77Parser:
 
     def p_arg_list_multi(self, p):
         """arg_list : arg_list COMMA expr"""
+        p[0] = p[1] + [p[3]]
+
+    def p_subprogram_list_empty(self, p):
+        """subprogram_list :"""
+        p[0] = []
+
+    def p_subprogram_list(self, p):
+        """subprogram_list : subprogram_list subprogram"""
+        p[0] = p[1] + [p[2]]
+
+    def p_subprogram(self, p):
+        """subprogram : function_def
+                      | subroutine_def"""
+        p[0] = p[1]
+
+    def p_function_def(self, p):
+        """function_def : type_spec FUNCTION ID LPAREN param_list_opt RPAREN body END"""
+        decls, stmts = p[7]
+        p[0] = ast.FunctionDef(
+            name=p[3],
+            return_type=p[1],
+            params=p[5],
+            decls=decls,
+            stmts=stmts,
+            lineno=p.lineno(2),
+        )
+
+    def p_subroutine_def(self, p):
+        """subroutine_def : SUBROUTINE ID LPAREN param_list_opt RPAREN body END
+                          | SUBROUTINE ID body END"""
+        if len(p) == 5:
+            decls, stmts = p[3]
+            p[0] = ast.SubroutineDef(
+                name=p[2],
+                params=[],
+                decls=decls,
+                stmts=stmts,
+                lineno=p.lineno(1),
+            )
+            return
+
+        decls, stmts = p[6]
+        p[0] = ast.SubroutineDef(
+            name=p[2],
+            params=p[4],
+            decls=decls,
+            stmts=stmts,
+            lineno=p.lineno(1),
+        )
+
+    def p_param_list_opt_empty(self, p):
+        """param_list_opt :"""
+        p[0] = []
+
+    def p_param_list_opt(self, p):
+        """param_list_opt : param_list"""
+        p[0] = p[1]
+
+    def p_param_list_single(self, p):
+        """param_list : ID"""
+        p[0] = [p[1]]
+
+    def p_param_list_multi(self, p):
+        """param_list : param_list COMMA ID"""
         p[0] = p[1] + [p[3]]
 
     # Tratamento de erros

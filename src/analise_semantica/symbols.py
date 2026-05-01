@@ -92,6 +92,24 @@ class SymbolTable:
             filename=filename,
         )
 
+    def declare_subroutine(
+        self,
+        name: str,
+        arity: int,
+        lineno: int,
+        filename: str = "<stdin>",
+    ) -> Symbol:
+        return self.declare(
+            Symbol(
+                name=name,
+                kind="subroutine",
+                type_name="SUBROUTINE",
+                arity=arity,
+                lineno=lineno,
+            ),
+            filename=filename,
+        )
+
     def lookup(self, name: str) -> Symbol | None:
         return self._table.get(name.upper())
 

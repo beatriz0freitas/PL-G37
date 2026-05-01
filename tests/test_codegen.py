@@ -219,3 +219,34 @@ class TestCodegenVmCompatibility:
 
         assert 'PUSHS "X"' in code
         assert 'PUSHG 0\nWRITES' not in code
+
+
+class TestCodegenSubprograms:
+
+    def test_conversor_emite_call_e_label_da_funcao(self, parser):
+        tree = parse_fixture(parser, "conversor.f", source_format="fixed")
+        code = gen_code(tree)
+
+        assert "PUSHA CONVRT" in code
+        assert "CALL" in code
+        assert "CONVRT:" in code
+        assert "RETURN" in code
+
+    def test_funcao_copia_argumentos_e_publica_retorno(self, parser):
+        src = """PROGRAM P
+                 INTEGER X
+                 X = DOBRO(3)
+                 PRINT *, X
+                 END
+                 INTEGER FUNCTION DOBRO(N)
+                 INTEGER N
+                 DOBRO = N + N
+                 RETURN
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert "PUSHA DOBRO" in code
+        assert "DOBRO:" in code
+        assert code.count("CALL") == 1
+        assert code.count("RETURN") >= 1

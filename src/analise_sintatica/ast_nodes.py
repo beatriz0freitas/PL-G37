@@ -27,7 +27,7 @@ Hierarquia:
           └── BinOp
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
@@ -44,6 +44,28 @@ class Node:
 class Program(Node):
     """PROGRAM nome\n  decls\n  stmts\nEND"""
     name: str
+    decls: list         # list[TypeDecl]
+    stmts: list         # list[Stmt]
+    subprograms: list = field(default_factory=list)  # list[FunctionDef | SubroutineDef]
+    lineno: int = 0
+
+
+@dataclass
+class FunctionDef(Node):
+    """INTEGER FUNCTION F(A, B)\n decls\n stmts\n END"""
+    name: str
+    return_type: str
+    params: list        # list[str]
+    decls: list         # list[TypeDecl]
+    stmts: list         # list[Stmt]
+    lineno: int = 0
+
+
+@dataclass
+class SubroutineDef(Node):
+    """SUBROUTINE S(A, B)\n decls\n stmts\n END"""
+    name: str
+    params: list        # list[str]
     decls: list         # list[TypeDecl]
     stmts: list         # list[Stmt]
     lineno: int = 0

@@ -73,9 +73,12 @@ class TestFixturePrograms:
 		assert any(isinstance(s, ast.ReadStmt) for s in tree.stmts)
 		assert any(isinstance(s, ast.AssignStmt) for s in tree.stmts)
 
-	def test_conversor_ainda_nao_e_suportado(self, parser):
-		with pytest.raises(ParseError):
-			parse_fixture(parser, "conversor.f")
+	def test_conversor_agora_e_suportado(self, parser):
+		tree = parse_fixture(parser, "conversor.f")
+		assert isinstance(tree, ast.Program)
+		assert len(tree.subprograms) == 1
+		assert isinstance(tree.subprograms[0], ast.FunctionDef)
+		assert tree.subprograms[0].name == "CONVRT"
 
 
 # ---------------------------------------------------------------------------

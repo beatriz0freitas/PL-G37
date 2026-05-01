@@ -18,37 +18,128 @@ class SemanticAnalyzer:
     def __init__(self):
         self.filename = "<stdin>"
         self.symbols = SymbolTable()
+        self.callables = SymbolTable()
         self.initialized: set[str] = set()
         self.labels: dict[int, ast.Node] = {}
+        self.current_function: ast.FunctionDef | None = None
 
     def analyze(self, program: ast.Program, filename: str = "<stdin>") -> ast.Program:
         self.filename = filename
+        self.callables = SymbolTable()
+        self._declare_subprogram_signatures(program)
+
         self.symbols = SymbolTable()
         self.initialized = set()
         self.labels = {}
+        self.current_function = None
 
-        self._declare_program_symbols(program)
+        self._declare_symbols(program.decls, self.symbols, allow_function_typing=True)
         self._collect_labels(program.stmts)
 
         program.decls = [self._visit_decl(decl) for decl in program.decls]
         program.stmts = self._visit_stmt_list(program.stmts)
+        program.subprograms = [self._analyze_subprogram(subprogram) for subprogram in program.subprograms]
+
         setattr(program, "symbol_table", self.symbols)
+        setattr(program, "callable_table", self.callables)
+        setattr(program, "subprogram_map", {sub.name: sub for sub in program.subprograms})
         return program
 
-    def _declare_program_symbols(self, program: ast.Program) -> None:
-        for decl in program.decls:
+    def _declare_subprogram_signatures(self, program: ast.Program) -> None:
+        for subprogram in program.subprograms:
+            if isinstance(subprogram, ast.FunctionDef):
+                self.callables.declare_function(
+                    subprogram.name,
+                    subprogram.return_type,
+                    len(subprogram.params),
+                    subprogram.lineno,
+                    filename=self.filename,
+                )
+                continue
+
+            if isinstance(subprogram, ast.SubroutineDef):
+                self.callables.declare_subroutine(
+                    subprogram.name,
+                    len(subprogram.params),
+                    subprogram.lineno,
+                    filename=self.filename,
+                )
+                continue
+
+            raise TypeError(f"Subprograma nao suportado: {type(subprogram).__name__}")
+
+    def _analyze_subprogram(self, subprogram: ast.FunctionDef | ast.SubroutineDef) -> ast.Node:
+        prev_symbols = self.symbols
+        prev_initialized = self.initialized
+        prev_labels = self.labels
+        prev_function = self.current_function
+
+        self.symbols = SymbolTable()
+        self.initialized = set()
+        self.labels = {}
+        self.current_function = subprogram if isinstance(subprogram, ast.FunctionDef) else None
+
+        if isinstance(subprogram, ast.FunctionDef):
+            subprogram.return_type = subprogram.return_type.upper()
+            self.symbols.declare_scalar(
+                subprogram.name,
+                subprogram.return_type,
+                subprogram.lineno,
+                filename=self.filename,
+            )
+            subprogram.result_name = subprogram.name.upper()
+
+        subprogram.name = subprogram.name.upper()
+        subprogram.params = [param.upper() for param in subprogram.params]
+        self._declare_symbols(subprogram.decls, self.symbols)
+        self._declare_parameters(subprogram)
+        self._collect_labels(subprogram.stmts)
+
+        subprogram.decls = [self._visit_decl(decl) for decl in subprogram.decls]
+        subprogram.stmts = self._visit_stmt_list(subprogram.stmts)
+        setattr(subprogram, "symbol_table", self.symbols)
+
+        self.symbols = prev_symbols
+        self.initialized = prev_initialized
+        self.labels = prev_labels
+        self.current_function = prev_function
+        return subprogram
+
+    def _declare_symbols(
+        self,
+        decls: list[ast.TypeDecl],
+        target: SymbolTable,
+        *,
+        allow_function_typing: bool = False,
+    ) -> None:
+        for decl in decls:
             if not isinstance(decl, ast.TypeDecl):
                 continue
             typename = decl.typename.upper()
             for var in decl.variables:
                 if isinstance(var, str):
-                    self.symbols.declare_scalar(var, typename, decl.lineno, filename=self.filename)
+                    name = var.upper()
+                    callable_symbol = self.callables.lookup(name)
+                    if allow_function_typing and callable_symbol is not None and callable_symbol.kind == "function":
+                        if callable_symbol.type_name != typename:
+                            self._error(decl.lineno, f"Tipo incompatível para função '{name}'")
+                        continue
+                    target.declare_scalar(name, typename, decl.lineno, filename=self.filename)
                     continue
                 if isinstance(var, ast.ArrayDecl):
                     dims = [self._const_array_dim(dim, var.name, var.lineno) for dim in var.dimensions]
-                    self.symbols.declare_array(var.name, typename, dims, var.lineno, filename=self.filename)
+                    target.declare_array(var.name, typename, dims, var.lineno, filename=self.filename)
                     continue
                 raise TypeError(f"Declaração não suportada: {type(var).__name__}")
+
+    def _declare_parameters(self, subprogram: ast.FunctionDef | ast.SubroutineDef) -> None:
+        for param in subprogram.params:
+            symbol = self.symbols.lookup(param)
+            if symbol is None:
+                self._error(subprogram.lineno, f"Parâmetro '{param}' usado sem declaração de tipo")
+            if symbol.kind != "scalar":
+                self._error(subprogram.lineno, f"Parâmetro '{param}' tem de ser escalar")
+            self._mark_initialized(param)
 
     def _collect_labels(self, stmts: list[ast.Node]) -> None:
         for stmt in stmts:
@@ -102,8 +193,10 @@ class SemanticAnalyzer:
             return self._visit_write(stmt)
         if isinstance(stmt, ast.CallStmt):
             return self._visit_call_stmt(stmt)
-        if isinstance(stmt, (ast.StopStmt, ast.ReturnStmt)):
+        if isinstance(stmt, ast.StopStmt):
             return stmt
+        if isinstance(stmt, ast.ReturnStmt):
+            return self._visit_return(stmt)
         raise NotImplementedError(f"Análise semântica não implementada para {type(stmt).__name__}")
 
     def _visit_assign(self, stmt: ast.AssignStmt) -> ast.AssignStmt:
@@ -191,11 +284,17 @@ class SemanticAnalyzer:
         return stmt
 
     def _visit_call_stmt(self, stmt: ast.CallStmt) -> ast.CallStmt:
-        sym = self.symbols.lookup(stmt.name)
-        if sym is not None and sym.kind in {"scalar", "array"}:
-            self._error(stmt.lineno, f"'{stmt.name}' não é uma subrotina")
         stmt.name = stmt.name.upper()
-        stmt.args = [self._rewrite_expr(arg)[0] for arg in stmt.args]
+        symbol = self._require_callable(stmt.name, stmt.lineno)
+        if symbol.kind != "subroutine":
+            self._error(stmt.lineno, f"'{stmt.name}' não é uma subrotina")
+
+        rewritten_args = [self._rewrite_expr(arg) for arg in stmt.args]
+        self._check_callable_arity(symbol, len(rewritten_args), stmt.lineno)
+        stmt.args = [arg for arg, _ in rewritten_args]
+        return stmt
+
+    def _visit_return(self, stmt: ast.ReturnStmt) -> ast.ReturnStmt:
         return stmt
 
     def _rewrite_lvalue(self, node: ast.Node) -> tuple[ast.VarRef | ast.ArrayRef, str]:
@@ -279,6 +378,17 @@ class SemanticAnalyzer:
         if symbol is not None and symbol.kind == "scalar":
             self._error(node.lineno, f"'{name}' é uma variável escalar, não uma função")
 
+        callable_symbol = self.callables.lookup(name)
+        if callable_symbol is not None:
+            if callable_symbol.kind != "function":
+                self._error(node.lineno, f"'{name}' não é uma função")
+            rewritten_args = [self._rewrite_expr(arg) for arg in node.args]
+            self._check_callable_arity(callable_symbol, len(rewritten_args), node.lineno)
+            node.name = name
+            node.args = [arg for arg, _ in rewritten_args]
+            self._annotate(node, callable_symbol.type_name, callable_symbol)
+            return node, callable_symbol.type_name
+
         spec = INTRINSICS.get(name)
         if spec is None:
             self._error(node.lineno, f"Função '{name}' não declarada nem intrínseca suportada")
@@ -321,7 +431,7 @@ class SemanticAnalyzer:
         if op in {"+", "-", "*", "/", "**"}:
             if left_type not in NUMERIC_TYPES or right_type not in NUMERIC_TYPES:
                 self._error(node.lineno, f"Operador '{node.op}' exige operandos numéricos")
-            result_type = "REAL" if "REAL" in {left_type, right_type} or op == "/" else "INTEGER"
+            result_type = "REAL" if "REAL" in {left_type, right_type} else "INTEGER"
             self._annotate(node, result_type)
             return node, result_type
 
@@ -376,6 +486,17 @@ class SemanticAnalyzer:
             return "REAL" if "REAL" in arg_types else "INTEGER"
 
         self._error(lineno, f"Intrínseca não suportada: {name}")
+
+    def _check_callable_arity(self, symbol: Symbol, arity: int, lineno: int) -> None:
+        if symbol.arity is not None and symbol.arity != arity:
+            kind_name = "Função" if symbol.kind == "function" else "Subrotina"
+            self._error(lineno, f"{kind_name} '{symbol.name}' espera {symbol.arity} argumentos, recebeu {arity}")
+
+    def _require_callable(self, name: str, lineno: int) -> Symbol:
+        symbol = self.callables.lookup(name)
+        if symbol is None:
+            self._error(lineno, f"Subprograma '{name}' não declarado")
+        return symbol
 
     def _const_array_dim(self, node: Any, name: str, lineno: int) -> int:
         rewritten, dtype = self._rewrite_expr(node)

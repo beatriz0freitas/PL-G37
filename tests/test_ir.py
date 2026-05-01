@@ -12,7 +12,11 @@ from src.representacao_intermedia.instrucoes import (
     IRLoadArray,
     IROp,
     IRPrint,
+    IRProcBegin,
+    IRProcEnd,
     IRRead,
+    IRReturn,
+    IRStop,
     IRStoreArray,
 )
 from src.analise_semantica import analyze
@@ -128,6 +132,10 @@ class TestIRIOAndCalls:
       PRINT *, MOD(N, 2)
       CALL FOO(N)
       END
+      SUBROUTINE FOO(X)
+      INTEGER X
+      RETURN
+      END
 """
         tree = parse_str(parser, src, source_format="fixed", filename="io_call.f")
         ir = gen_ir(tree)
@@ -167,3 +175,20 @@ class TestIRIOAndCalls:
         assert len(reads) >= 1
         assert any(str(arg).startswith("NUMS[") for read in reads for arg in read.args)
         assert any(load.name == "NUMS" for load in loads)
+
+    def test_conversor_emite_main_e_subprograma(self, parser):
+        tree = parse_fixture(parser, "conversor.f", source_format="fixed")
+        ir = gen_ir(tree)
+
+        proc_begins = [i for i in ir if isinstance(i, IRProcBegin)]
+        proc_ends = [i for i in ir if isinstance(i, IRProcEnd)]
+        calls = [i for i in ir if isinstance(i, IRCall)]
+
+        assert any(isinstance(i, IRStop) for i in ir)
+        assert len(proc_begins) == 1
+        assert proc_begins[0].name == "CONVRT"
+        assert proc_begins[0].kind == "function"
+        assert proc_begins[0].params == ["N", "B"]
+        assert len(proc_ends) == 1
+        assert any(c.name == "CONVRT" and c.dest is not None for c in calls)
+        assert any(isinstance(i, IRReturn) for i in ir)

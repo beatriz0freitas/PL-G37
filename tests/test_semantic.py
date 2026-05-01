@@ -138,3 +138,48 @@ class TestSemanticLabels:
             analyze_str(parser, src)
 
         assert "Label 99 não definida" in str(exc_info.value)
+
+
+class TestSemanticSubprograms:
+
+    def test_conversor_resolve_funcao_definida_pelo_utilizador(self, parser):
+        from conftest import parse_fixture
+
+        tree = analyze(parse_fixture(parser, "conversor.f", source_format="fixed"), filename="conversor.f")
+
+        assert tree.callable_table.lookup("CONVRT").kind == "function"
+        func = tree.subprograms[0]
+        assert getattr(func, "result_name") == "CONVRT"
+        assert func.symbol_table.lookup("N").type_name == "INTEGER"
+        assert func.symbol_table.lookup("CONVRT").type_name == "INTEGER"
+
+    def test_call_expr_valida_aridade_da_funcao(self, parser):
+        src = """PROGRAM P
+                 INTEGER X
+                 X = FOO(1)
+                 END
+                 INTEGER FUNCTION FOO(A, B)
+                 INTEGER A, B
+                 FOO = A + B
+                 RETURN
+                 END
+              """
+        with pytest.raises(SemanticError) as exc_info:
+            analyze_str(parser, src)
+
+        assert "espera 2 argumentos" in str(exc_info.value)
+
+    def test_call_stmt_exige_subrotina(self, parser):
+        src = """PROGRAM P
+                 CALL FOO(1)
+                 END
+                 INTEGER FUNCTION FOO(A)
+                 INTEGER A
+                 FOO = A
+                 RETURN
+                 END
+              """
+        with pytest.raises(SemanticError) as exc_info:
+            analyze_str(parser, src)
+
+        assert "não é uma subrotina" in str(exc_info.value)
