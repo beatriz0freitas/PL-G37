@@ -1,7 +1,7 @@
 # Estado do Projeto — Compilador Fortran 77
 
 > **Grupo G37 · Processamento de Linguagens 2026**
-> Última atualização: 2026-04-28
+> Última atualização: 2026-05-01
 
 ---
 
@@ -15,7 +15,7 @@
 | Representação Intermédia (AST -> IR)    | ✅ Implementada |
 | Tradução de Código (IR -> EWVM)         | ✅ Implementada |
 | Otimização (valorização)                | 🔲 Em falta     |
-| Testes                                  | ✅ 154/154      |
+| Testes                                  | ✅ 161/161      |
 
 ---
 
@@ -136,8 +136,8 @@
 **Limitações conhecidas:**
 
 - [ ] Ainda não há execução automática do `.vm` na VM do docente para validação end-to-end.
-- [ ] O backend ainda extrai metadados de declarações diretamente da AST, apesar de a tabela de símbolos já existir.
-- [ ] Intrínsecas como `ABS`, `SQRT`, `MAX` e `MIN` continuam com suporte parcial no backend EWVM.
+- [X] O backend extrai metadados de declarações exclusivamente da tabela de símbolos semântica e falha explicitamente sem `program.symbol_table`.
+- [X] Intrínsecas `ABS`, `SQRT`, `MAX` e `MIN` têm agora tradução no backend EWVM.
 
 **Validação:**
 

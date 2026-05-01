@@ -119,6 +119,65 @@ class TestCodegenArrays:
         assert "LOAD 0" in code
         assert "WRITEI" in code
 
+    def test_backend_prefere_symbol_table_a_decls_ast(self, parser):
+        src = """PROGRAM P
+                 REAL X
+                 X = 1.0
+                 PRINT *, X
+                 END
+              """
+        tree = parse_str(parser, src)
+        tree.decls = []
+
+        ir_generator = IRGenerator()
+        ir_generator.generate(tree)
+        backend = EWVMGenerator.from_program(tree)
+        code = backend.generate(ir_generator.instructions)
+
+        assert "WRITEF" in code
+        assert "WRITEI" not in code
+
+    def test_backend_falha_sem_symbol_table(self, parser):
+        src = """PROGRAM P
+                 INTEGER X
+                 X = 1
+                 END
+              """
+        tree = parser.parse(src, filename="<codegen-no-sem>", source_format="free")
+
+        try:
+            EWVMGenerator.from_program(tree)
+        except RuntimeError as exc:
+            assert "program.symbol_table" in str(exc)
+        else:
+            raise AssertionError("Esperava RuntimeError quando a symbol_table não existe")
+
+
+class TestCodegenIntrinsics:
+
+    def test_abs_max_min_e_sqrt_geram_codigo_ewvm(self, parser):
+        src = """PROGRAM P
+                 REAL R, S
+                 INTEGER I, J, K
+                 R = ABS(-4.0)
+                 S = SQRT(9.0)
+                 I = 3
+                 J = 7
+                 K = MAX(I, J) + MIN(I, J)
+                 PRINT *, R, S, K
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert "NotImplementedError" not in code
+        assert "FSUB" in code
+        assert "SUPEQ" in code
+        assert "INFEQ" in code
+        assert "FDIV" in code
+        assert "FADD" in code
+        assert "WRITEF" in code
+        assert "WRITEI" in code
+
 
 class TestCodegenVmCompatibility:
 

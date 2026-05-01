@@ -41,6 +41,8 @@ class EWVMGenerator:
         self.layout = MemoryLayout()
         self.lines: list[str] = []
         self.temp_types: dict[str, str] = {}
+        self._backend_label_count = 0
+        self._helper_scalars: dict[str, str] = {}
 
     @classmethod
     def from_program(cls, program: ast.Program) -> "EWVMGenerator":
@@ -51,9 +53,12 @@ class EWVMGenerator:
         self.lines = []
         self.layout = MemoryLayout()
         self.temp_types = {}
+        self._backend_label_count = 0
+        self._helper_scalars = {}
 
         self._allocate_declared_symbols()
         self._infer_temp_types(instructions)
+        self._reserve_intrinsic_helpers(instructions)
         self._allocate_temporaries_and_implicit_scalars(instructions)
 
         self.emit("START")
@@ -74,6 +79,10 @@ class EWVMGenerator:
     def emit_label(self, label: Any) -> None:
         self.lines.append(f"{self._label_name(label)}:")
 
+    def _new_backend_label(self, prefix: str) -> str:
+        self._backend_label_count += 1
+        return f"{prefix}_{self._backend_label_count}"
+
     def _label_name(self, label: Any) -> str:
         raw = str(label)
         sanitized = "".join(ch for ch in raw if ch.isalnum())
@@ -84,6 +93,23 @@ class EWVMGenerator:
             self.layout.allocate_scalar(name)
         for name in sorted(self.array_types):
             self.layout.allocate_scalar(name)
+
+    def _reserve_intrinsic_helpers(self, instructions: list[IRInstr]) -> None:
+        needs_sqrt = any(
+            isinstance(instr, IRCall) and instr.name.upper() == "SQRT"
+            for instr in instructions
+        )
+        if not needs_sqrt:
+            return
+
+        self._reserve_helper_scalar("@SQRT_ARG", "REAL")
+        self._reserve_helper_scalar("@SQRT_GUESS", "REAL")
+        self._reserve_helper_scalar("@SQRT_ITER", "INTEGER")
+
+    def _reserve_helper_scalar(self, name: str, typename: str) -> None:
+        self._helper_scalars[name] = typename
+        self.scalar_types.setdefault(name, typename)
+        self.layout.allocate_scalar(name)
 
     def _emit_array_allocations(self) -> None:
         for name in sorted(self.array_types):
@@ -303,9 +329,7 @@ class EWVMGenerator:
             elif upper == "INT" and self._type_of(args[0]) == "REAL":
                 self.emit("FTOI")
         elif upper in {"ABS", "SQRT", "MAX", "MIN"}:
-            raise NotImplementedError(
-                f"Intrínseca '{upper}' ainda não mapeada para a EWVM documentada"
-            )
+            self._translate_intrinsic_call(upper, args)
         else:
             for arg in args:
                 self._push_value(arg)
@@ -314,6 +338,130 @@ class EWVMGenerator:
 
         if dest is not None:
             self._pop_to(dest)
+
+    def _translate_intrinsic_call(self, name: str, args: list[Any]) -> None:
+        if name == "ABS":
+            self._emit_abs(args[0])
+            return
+        if name == "SQRT":
+            self._emit_sqrt(args[0])
+            return
+        if name == "MAX":
+            self._emit_max_min(args[0], args[1], want_max=True)
+            return
+        if name == "MIN":
+            self._emit_max_min(args[0], args[1], want_max=False)
+            return
+        raise NotImplementedError(f"Intrínseca sem tradução: {name}")
+
+    def _emit_abs(self, arg: Any) -> None:
+        is_real = self._type_of(arg) == "REAL"
+        keep_label = self._new_backend_label("ABS_KEEP")
+        end_label = self._new_backend_label("ABS_END")
+
+        self._push_value(arg)
+        self.emit("PUSHF" if is_real else "PUSHI", 0.0 if is_real else 0)
+        self.emit("FINF" if is_real else "INF")
+        self.emit("JZ", self._label_name(keep_label))
+
+        self._push_value(arg)
+        self.emit("PUSHF" if is_real else "PUSHI", 0.0 if is_real else 0)
+        self.emit("SWAP")
+        self.emit("FSUB" if is_real else "SUB")
+        self.emit("JUMP", self._label_name(end_label))
+
+        self.emit_label(keep_label)
+        self._push_value(arg)
+        self.emit_label(end_label)
+
+    def _emit_max_min(self, left: Any, right: Any, *, want_max: bool) -> None:
+        is_real = "REAL" in {self._type_of(left), self._type_of(right)}
+        take_left_label = self._new_backend_label("MM_LEFT")
+        end_label = self._new_backend_label("MM_END")
+
+        self._push_value(left)
+        self._push_value(right)
+        if want_max:
+            self.emit("FSUPEQ" if is_real else "SUPEQ")
+        else:
+            self.emit("FINFEQ" if is_real else "INFEQ")
+        self.emit("JZ", self._label_name(take_left_label))
+
+        self._push_value(left)
+        self.emit("JUMP", self._label_name(end_label))
+
+        self.emit_label(take_left_label)
+        self._push_value(right)
+        self.emit_label(end_label)
+
+    def _emit_sqrt(self, arg: Any) -> None:
+        arg_name = "@SQRT_ARG"
+        guess_name = "@SQRT_GUESS"
+        iter_name = "@SQRT_ITER"
+        negative_label = self._new_backend_label("SQRT_NEG")
+        zero_label = self._new_backend_label("SQRT_ZERO")
+        use_one_label = self._new_backend_label("SQRT_ONE")
+        loop_label = self._new_backend_label("SQRT_LOOP")
+        done_label = self._new_backend_label("SQRT_DONE")
+        end_label = self._new_backend_label("SQRT_END")
+
+        self._push_value(arg)
+        if self._type_of(arg) != "REAL":
+            self.emit("ITOF")
+        self._pop_to(arg_name)
+
+        self.emit("PUSHG", self.layout.addr_of_scalar(arg_name))
+        self.emit("PUSHF", 0.0)
+        self.emit("FINF")
+        self.emit("JZ", self._label_name(zero_label))
+        self.emit("PUSHF", 0.0)
+        self.emit("JUMP", self._label_name(end_label))
+
+        self.emit_label(zero_label)
+        self.emit("PUSHG", self.layout.addr_of_scalar(arg_name))
+        self.emit("PUSHF", 0.0)
+        self.emit("EQUAL")
+        self.emit("JZ", self._label_name(use_one_label))
+        self.emit("PUSHF", 0.0)
+        self.emit("JUMP", self._label_name(end_label))
+
+        self.emit_label(use_one_label)
+        self.emit("PUSHG", self.layout.addr_of_scalar(arg_name))
+        self.emit("PUSHF", 1.0)
+        self.emit("FINF")
+        self.emit("JZ", self._label_name(negative_label))
+        self.emit("PUSHF", 1.0)
+        self._pop_to(guess_name)
+        self.emit("JUMP", self._label_name(loop_label))
+
+        self.emit_label(negative_label)
+        self.emit("PUSHG", self.layout.addr_of_scalar(arg_name))
+        self._pop_to(guess_name)
+
+        self.emit_label(loop_label)
+        self.emit("PUSHG", self.layout.addr_of_scalar(iter_name))
+        self.emit("PUSHI", 8)
+        self.emit("INF")
+        self.emit("JZ", self._label_name(done_label))
+
+        self.emit("PUSHG", self.layout.addr_of_scalar(guess_name))
+        self.emit("PUSHG", self.layout.addr_of_scalar(arg_name))
+        self.emit("PUSHG", self.layout.addr_of_scalar(guess_name))
+        self.emit("FDIV")
+        self.emit("FADD")
+        self.emit("PUSHF", 2.0)
+        self.emit("FDIV")
+        self._pop_to(guess_name)
+
+        self.emit("PUSHG", self.layout.addr_of_scalar(iter_name))
+        self.emit("PUSHI", 1)
+        self.emit("ADD")
+        self._pop_to(iter_name)
+        self.emit("JUMP", self._label_name(loop_label))
+
+        self.emit_label(done_label)
+        self.emit("PUSHG", self.layout.addr_of_scalar(guess_name))
+        self.emit_label(end_label)
 
     def _binary_opcode(self, op: str, left: Any, right: Any) -> str:
         cmp_ops = {
