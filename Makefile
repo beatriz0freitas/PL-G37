@@ -4,7 +4,7 @@ PYTHON ?= python3
 FIXTURE ?= tests/fixtures/hello.f
 FORMAT ?= fixed
 
-.PHONY: help setup setup-recreate lex parse ir codegen test test-lexer test-parser test-ir test-codegen clean
+.PHONY: help setup setup-recreate lex parse sem ir opt codegen test test-lexer test-parser test-ir test-codegen clean
 
 help:
 	@echo "Alvos disponíveis:"
@@ -12,7 +12,9 @@ help:
 	@echo "  make setup-recreate                         # recria .venv do zero e reinstala dependências"
 	@echo "  make lex FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make parse FIXTURE=... [FORMAT=fixed|free]"
+	@echo "  make sem FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make ir FIXTURE=... [FORMAT=fixed|free]"
+	@echo "  make opt FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make codegen FIXTURE=... [FORMAT=fixed|free]"
 	@echo "  make test                                   # corre toda a suíte de testes"
 	@echo "  make test-lexer                             # corre testes do lexer"
@@ -41,8 +43,14 @@ lex: .venv/bin/activate
 parse: .venv/bin/activate
 	.venv/bin/python -m src --stage parse --format $(FORMAT) $(FIXTURE)
 
+sem: .venv/bin/activate
+	.venv/bin/python -m src --stage sem --format $(FORMAT) $(FIXTURE)
+
 ir: .venv/bin/activate
 	.venv/bin/python -m src --stage ir --format $(FORMAT) $(FIXTURE)
+
+opt: .venv/bin/activate
+	.venv/bin/python -m src --stage opt --format $(FORMAT) $(FIXTURE)
 
 codegen: .venv/bin/activate
 	.venv/bin/python -m src --stage codegen --format $(FORMAT) $(FIXTURE)

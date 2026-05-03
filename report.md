@@ -2,7 +2,7 @@
 
 **Processamento de Linguagens - G37**
 
-Ana Beatriz Freitas a106853 | Luis Miguel Coelho 106843 | Matilde Teixeira xxxxx
+Ana Beatriz Freitas (a106853) | Luis Miguel Coelho (a106843) | Matilde Teixeira
 **Instituição:** Universidade do Minho
 **Ano letivo:** 2026
 
@@ -12,13 +12,13 @@ Ana Beatriz Freitas a106853 | Luis Miguel Coelho 106843 | Matilde Teixeira xxxxx
 
 O presente relatório descreve o desenvolvimento de um compilador para um subconjunto de Fortran 77. A implementação foi realizada em Python, recorrendo à biblioteca PLY para as fases de análise léxica e sintática, e foi estruturada de forma modular para permitir evolução progressiva até à geração de código para EWVM. Desde o início, a prioridade foi obter uma solução tecnicamente sólida e de leitura imediata, com separação de responsabilidades entre fases e validação contínua através de testes automatizados.
 
-Do ponto de vista metodológico, o trabalho seguiu o encadeamento clássico de compiladores: tokenização, parsing e construção de AST, seguido de tradução para representação intermédia. As fases de análise semântica, codegen para EWVM e otimização ficaram previstas no desenho, mas ainda não estão concluídas nesta versão. **ALTERAR DEPOIS**
+Do ponto de vista metodológico, o trabalho seguiu o encadeamento clássico de compiladores: tokenização, parsing e construção de AST, análise semântica, tradução para representação intermédia, otimização e geração final de código EWVM. A versão atual implementa todas estas fases e disponibiliza testes automatizados por componente e artefactos `.vm` para os programas de referência.
 
 ## 2. Arquitetura global
 
 A arquitetura adotada baseia-se numa *pipeline* explícita em que cada etapa recebe uma representação bem definida e produz a representação seguinte. O código fonte Fortran é inicialmente transformado em linhas lógicas, depois convertido em tokens, validado sintaticamente para construção da AST e, por fim, traduzido para IR de três endereços. Esta abordagem foi escolhida por razões de clareza e manutenção uma vez que permite testar cada fase de forma isolada, reduzir acoplamento entre componentes e localizar erros com maior precisão.
 
-A organização dos módulos reflete essa decisão. A pasta `src/analise_lexica` concentra pré-processamento e lexer, a PA `src/analise_sintatica` contém parser e nós da AST, a `src/representacao_intermedia` define o modelo de instruções e o gerador AST→IR. A interface de execução foi centralizada em `src/cli.py`, enquanto o tratamento de erros está em `src/errors.py`, garantindo mensagens consistentes ao longo de todo o pipeline.
+A organização dos módulos reflete essa decisão. A pasta `src/analise_lexica` concentra pré-processamento e lexer, `src/analise_sintatica` contém parser e nós da AST, `src/analise_semantica` valida tipos, símbolos e labels, `src/representacao_intermedia` define o modelo de instruções e o gerador AST→IR, `src/codegen` contém o backend EWVM, e `src/optimizer.py` aplica otimizações sobre a IR. A interface de execução foi centralizada em `src/cli.py`, enquanto o tratamento de erros está em `src/errors.py`, garantindo mensagens consistentes ao longo de todo o pipeline.
 
 Para enquadrar visualmente esta arquitetura, o diagrama seguinte apresenta a progressão completa do compilador, da entrada fonte até às fases finais de geração e otimização:
 
@@ -72,25 +72,35 @@ ENDIF1:
 
 Este tipo de saída facilita validação de precedências, saltos e estruturação de blocos antes da fase de backend.
 
-## 6. Análise semântica (secção reservada)
+## 6. Análise semântica
 
-*Secção intencionalmente reservada para a versão final do relatório.*
-*A preencher após implementação completa de tabela de símbolos, verificação de tipos e validação contextual.*
+A análise semântica constrói tabelas de símbolos para o programa principal e para cada subprograma. Esta fase rejeita declarações duplicadas, uso de identificadores não declarados, uso antes de inicialização, índices de array não inteiros, aridade incorreta em chamadas e labels inexistentes em `GOTO` ou `DO`.
 
-## 7. Geração de código EWVM (secção reservada)
+A resolução contextual de `ID(...)` é feita aqui: se o identificador for array, a expressão é convertida para `ArrayRef`; se for função declarada ou intrínseca, mantém-se como chamada. As atribuições aceitam conversões numéricas simples entre `INTEGER`, `REAL` e `DOUBLE PRECISION`, ficando a conversão concreta para o backend EWVM.
 
-*Secção intencionalmente reservada para a versão final do relatório.*
-*A preencher após implementação do backend IR→EWVM e definição do modelo de memória.*
+## 7. Geração de código EWVM
 
-## 8. Otimização sobre IR (secção reservada)
+O backend traduz a IR para a máquina virtual EWVM documentada pelos docentes. A zona global é reservada antes de `START`, seguindo os exemplos da VM, e é acedida com `PUSHG`/`STOREG`. Arrays são alocados com `ALLOC`, guardados como endereços e acedidos com `PADD`, `LOAD` e `STORE`.
 
-*Secção intencionalmente reservada para a versão final do relatório.*
-*A preencher após implementação dos passes de otimização e respetiva avaliação de impacto.*
+As operações inteiras usam `ADD`, `SUB`, `MUL`, `DIV`, `MOD` e comparadores inteiros; as operações reais usam `FADD`, `FSUB`, `FMUL`, `FDIV` e comparadores reais. O backend emite `ITOF`, `FTOI` e `ATOF` quando necessário, trata `READ`, `PRINT` e `WRITE`, e respeita a ordem de pilha documentada para `CONCAT`.
 
-## 9. Validação end-to-end em EWVM (secção reservada)
+Subprogramas externos são traduzidos para labels próprios. As chamadas usam `PUSHA` e `CALL`, com frames baseadas em `FP`: parâmetros ficam em offsets negativos, o slot de retorno em `0`, e variáveis/temporários locais em offsets positivos. O suporte cobre `FUNCTION` e `SUBROUTINE` externos no subconjunto exercitado pelo projeto.
 
-*Secção intencionalmente reservada para a versão final do relatório.*
-*A preencher após integração completa de execução em VM e comparação automática de outputs esperados.*
+## 8. Otimização sobre IR
+
+A etapa de valorização aplica três otimizações simples e previsíveis: propagação de constantes, folding de operações com literais e eliminação de código morto após `JUMP`, `STOP` e `RETURN`. A ordem usada é:
+
+```text
+propagação → folding → propagação → folding → propagação → DCE
+```
+
+Esta repetição curta cobre cadeias comuns de temporários, como `t1 = 1 + 2; t2 = t1 + 3`, sem introduzir uma análise global difícil de explicar.
+
+## 9. Validação end-to-end em EWVM
+
+A geração EWVM é validada automaticamente comparando a saída de `--stage codegen` com ficheiros em `tests/expected_vm/`. Esses ficheiros cobrem `hello`, `fatorial`, `primo`, `somaarr`, `conversor` e `continuation`, e cumprem o requisito de entregar programas de exemplo juntamente com o respetivo código VM.
+
+A execução na VM do docente continua manual por a interface disponibilizada ser web. O procedimento recomendado é gerar o `.vm`, colar em `https://ewvm.epl.di.uminho.pt/run` e comparar o output esperado.
 
 ## 10. Tratamento de erros e robustez
 
@@ -98,7 +108,7 @@ O projeto utiliza uma hierarquia comum de exceções (`CompileError`, `LexError`
 
 ## 11. Validação experimental
 
-A validação foi conduzida com `pytest`, privilegiando testes por fase e casos de integração com programas de referência. No estado atual, a suíte contém 125 testes e todos se encontram a passar. A distribuição inclui testes de lexer, parser e IR, cobrindo casos normais, precedência de operadores, labels, fluxos com `DO`/`GOTO`, e compatibilidade fixed/free-form.
+A validação foi conduzida com `pytest`, privilegiando testes por fase e casos de integração com programas de referência. No estado atual, a suíte contém 208 testes e todos se encontram a passar. A distribuição inclui testes de lexer, parser, semântica, IR, otimizador, backend EWVM e CLI.
 
 As fixtures `hello.f`, `fatorial.f`, `primo.f` e `continuation.f` foram selecionadas por representarem padrões diretamente alinhados com o enunciado: I/O básica, ciclos com labels, expressões lógicas e continuação de linha. Esta seleção permitiu validar não apenas unidades isoladas, mas também comportamento integrado do pipeline implementado.
 
@@ -106,16 +116,20 @@ Em termos quantitativos, o estado de testes implementados pode ser resumido da s
 
 | Componente      | Ficheiro de testes             | Resultado atual   |
 | --------------- | ------------------------------ | ----------------- |
-| Léxico         | `tests/test_lexer.py`        | 98/98             |
-| Sintático      | `tests/test_parser_smoke.py` | 20/20             |
-| IR              | `tests/test_ir.py`           | 7/7               |
-| **Total** | —                             | **125/125** |
+| Léxico          | `tests/test_lexer.py`          | 102/102           |
+| Sintático       | `tests/test_parser_smoke.py`   | 25/25             |
+| Semântico       | `tests/test_semantic.py`       | 14/14             |
+| IR              | `tests/test_ir.py`             | 9/9               |
+| Codegen EWVM    | `tests/test_codegen.py`        | 20/20             |
+| CLI/VM esperado | `tests/test_cli.py`            | 9/9               |
+| Otimizador      | `tests/test_optimizer.py`      | 29/29             |
+| **Total**       | —                              | **208/208**       |
 
 ## 12. Dificuldades encontradas e decisões de projeto
 
 A principal dificuldade técnica foi lidar com especificidades históricas de Fortran 77, sobretudo no tratamento de colunas em fixed-form e no controlo de fluxo baseado em labels. A decisão de introduzir pré-processamento separado resolveu a primeira dificuldade de forma limpa. Já para a segunda, a estratégia de preservar labels na AST e traduzi-las explicitamente na IR permitiu manter rastreabilidade e correção estrutural no fluxo de execução.
 
-Outra dificuldade relevante foi equilibrar simplicidade com extensibilidade. Evitou-se sobrecarga prematura com mecanismos semânticos incompletos ou otimizações ad hoc. Em vez disso, consolidou-se primeiro uma base funcional robusta, com testes e interfaces claras entre fases. Este encadeamento foi determinante para manter evolução controlada do projeto.
+Outra dificuldade relevante foi equilibrar simplicidade com extensibilidade. As otimizações foram mantidas locais e fáceis de justificar, em vez de introduzir análises globais frágeis. No backend, a prioridade foi emitir apenas instruções existentes na EWVM documentada, evitando pseudo-operações inexistentes como `NEG` ou `NEQ`.
 
 ## 13. Execução e reprodução
 
@@ -123,18 +137,20 @@ Para reproduzir o estado atual, deve ser criado um ambiente virtual Python, inst
 
 ## 14. Trabalho futuro
 
+Como evolução natural, ficariam a execução automática contra uma instância local/remota da EWVM, passagem de argumentos por referência completa em subprogramas, suporte efetivo de `IMPLICIT NONE`, otimizações mais avançadas e melhor compactação de temporários/frames.
+
 ## 15. Conclusão
 
-O trabalho realizado até ao momento apresenta uma base técnica sólida, coerente com os princípios de Processamento de Linguagens e adequada ao contexto pedagógico do projeto. O frontend está completo e estabilizado, a IR encontra-se funcional, e a validação automatizada confirma consistência interna da implementação. O desenho modular adotado facilita a continuação para semântica e geração de código, sem necessidade de reestruturações profundas.
+O trabalho realizado apresenta uma solução completa para o subconjunto exigido no enunciado: análise léxica e sintática com PLY, análise semântica, IR, otimização e geração de EWVM. O desenho modular adotado facilita a explicação em defesa e permite evoluir o compilador sem reestruturações profundas.
 
-Em síntese, o projeto encontra-se numa fase madura de desenvolvimento intermédio: já demonstra comportamento compilatório correto nas fases implementadas e está tecnicamente preparado para evoluir até à execução final em EWVM.
+Em síntese, o projeto encontra-se pronto para validação final: os exemplos principais compilam, os artefactos `.vm` estão presentes e a suíte automatizada confirma o estado atual do pipeline.
 
 ---
 
 ### Anexo — Gramática resumida do subconjunto implementado
 
 ```ebnf
-program      ::= PROGRAM ID body END
+program      ::= PROGRAM ID body END { subprogram }
 body         ::= decl_list stmt_list
 
 decl_list    ::= { decl }
@@ -186,6 +202,11 @@ write_stmt   ::= WRITE '(' expr ',' '*' ')' print_list
                | WRITE '(' expr ',' expr ')' print_list
 
 call_stmt    ::= CALL ID [ '(' arg_list ')' ]
+
+subprogram   ::= function_def | subroutine_def
+function_def ::= type_spec FUNCTION ID '(' [param_list] ')' body END
+subroutine_def ::= SUBROUTINE ID ['(' [param_list] ')'] body END
+param_list   ::= ID { ',' ID }
 
 arg_list     ::= expr { ',' expr }
 var_list     ::= lvalue { ',' lvalue }

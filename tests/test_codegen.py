@@ -14,6 +14,16 @@ def gen_code(tree):
     return backend.generate(ir_generator.instructions)
 
 
+def gen_optimized_code(tree):
+    from src.optimizer import optimize
+
+    tree = analyze(tree, filename="<codegen-test>")
+    ir_generator = IRGenerator()
+    ir_generator.generate(tree)
+    backend = EWVMGenerator.from_program(tree)
+    return backend.generate(optimize(ir_generator.instructions))
+
+
 def parse_str(parser, code: str, source_format: str = "free", filename: str = "<codegen-test>"):
     tree = parser.parse(code, filename=filename, source_format=source_format)
     return analyze(tree, filename=filename)
@@ -72,8 +82,8 @@ class TestCodegenFatorial:
         code = gen_code(parse_str(parser, src))
         lines = code.splitlines()
 
-        assert lines[0] == "START"
-        assert lines[1:4] == ["PUSHI 0", "PUSHI 0", "PUSHI 0"]
+        assert lines[0:3] == ["PUSHI 0", "PUSHI 0", "PUSHI 0"]
+        assert lines[3] == "START"
         assert lines[4] == "PUSHI 1"
 
 
@@ -219,6 +229,59 @@ class TestCodegenVmCompatibility:
 
         assert 'PUSHS "X"' in code
         assert 'PUSHG 0\nWRITES' not in code
+
+    def test_concat_respeita_ordem_documentada_da_ewvm(self, parser):
+        src = """PROGRAM P
+                 CHARACTER S
+                 S = 'A' // 'B'
+                 PRINT *, S
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert 'PUSHS "B"\nPUSHS "A"\nCONCAT' in code
+
+    def test_operacao_mista_int_real_converte_antes_de_float_op(self, parser):
+        src = """PROGRAM P
+                 INTEGER I
+                 REAL R
+                 I = 2
+                 R = I + 0.5
+                 PRINT *, R
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert "ITOF\nPUSHF 0.5\nFADD" in code
+        assert "WRITEF" in code
+
+    def test_double_precision_usa_operacoes_reais_da_vm(self, parser):
+        src = """PROGRAM P
+                 DOUBLE PRECISION D
+                 INTEGER I
+                 I = 2
+                 D = I + 0.5D0
+                 PRINT *, D
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert "ITOF\nPUSHF 0.5\nFADD" in code
+        assert "WRITEF" in code
+
+    def test_optimizer_nao_perde_tipo_em_atribuicao_real_por_variavel(self, parser):
+        src = """PROGRAM P
+                 INTEGER I
+                 REAL R
+                 I = 1
+                 R = I
+                 PRINT *, R
+                 END
+              """
+        code = gen_optimized_code(parse_str(parser, src))
+
+        assert "ITOF\nSTOREG" in code
+        assert "PUSHG 1\nWRITEF" in code
 
 
 class TestCodegenSubprograms:

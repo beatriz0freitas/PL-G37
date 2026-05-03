@@ -3,8 +3,10 @@
 Uso:
     python cli.py --stage lex <ficheiro.f>
     python cli.py --stage parse <ficheiro.f>
-    python cli.py --stage lex --format free <ficheiro.f>
-    python cli.py --debug --stage lex <ficheiro.f>
+    python cli.py --stage sem <ficheiro.f>
+    python cli.py --stage ir <ficheiro.f>
+    python cli.py --stage opt <ficheiro.f>      # IR após otimização
+    python cli.py --stage codegen <ficheiro.f>  # EWVM (com otimização)
 """
 
 import argparse
@@ -20,7 +22,7 @@ def parse_args():
                                 description="Compilador Fortran 77 → EWVM")
     p.add_argument("input", metavar="FICHEIRO")
     p.add_argument("--stage",
-                   choices=["lex", "parse", "sem", "ir", "codegen"],
+                   choices=["lex", "parse", "sem", "ir", "opt", "codegen"],
                    default="codegen")
     p.add_argument("--format", dest="source_format",
                    choices=["fixed", "free", "auto"], default="auto")
@@ -127,62 +129,6 @@ def run_parse(
     return tree
 
 
-def run_ir(source: str, filename: str, source_format: str, debug: bool):
-    _, parser = _build_pipeline(debug=debug)
-    tree = run_parse(
-        source,
-        filename,
-        source_format,
-        debug=False,
-        parser=parser,
-        emit_output=False,
-    )
-    tree = run_semantic(tree, filename, emit_output=False)
-
-    if debug:
-        print("[ir] AST semântica (debug):")
-        print(tree)
-
-    from src.representacao_intermedia.gerador import IRGenerator
-    generator = IRGenerator()
-    generator.generate(tree)
-
-    print("[ir] Código Intermédio Gerado:")
-    for instr in generator.instructions:
-        print(f"  {instr}")
-
-    return generator.instructions
-
-
-def run_codegen(source: str, filename: str, source_format: str, debug: bool):
-    _, parser = _build_pipeline(debug=debug)
-    tree = run_parse(
-        source,
-        filename,
-        source_format,
-        debug=False,
-        parser=parser,
-        emit_output=False,
-    )
-    tree = run_semantic(tree, filename, emit_output=False)
-
-    from src.codegen.ewvm import EWVMGenerator
-    from src.representacao_intermedia.gerador import IRGenerator
-
-    ir_generator = IRGenerator()
-    ir_generator.generate(tree)
-
-    if debug:
-        print("[codegen] IR (debug):")
-        for instr in ir_generator.instructions:
-            print(f"  {instr}")
-
-    backend = EWVMGenerator.from_program(tree)
-    code = backend.generate(ir_generator.instructions)
-    print(code)
-    return code
-
-
 def run_semantic(tree, filename: str, emit_output: bool = True):
     from src.analise_semantica import analyze
 
@@ -192,6 +138,77 @@ def run_semantic(tree, filename: str, emit_output: bool = True):
         print(f"[sem] análise semântica concluída para programa {analyzed.name!r}")
         print(f"[sem] símbolos registados: {symbol_count}")
     return analyzed
+
+
+def _run_ir_generator(tree):
+    """Gera IR não otimizado e devolve as instruções."""
+    from src.representacao_intermedia.gerador import IRGenerator
+    generator = IRGenerator()
+    generator.generate(tree)
+    return generator.instructions
+
+
+def run_ir(source: str, filename: str, source_format: str, debug: bool):
+    _, parser = _build_pipeline(debug=debug)
+    tree = run_parse(source, filename, source_format, debug=False,
+                     parser=parser, emit_output=False)
+    tree = run_semantic(tree, filename, emit_output=False)
+
+    if debug:
+        print("[ir] AST semântica (debug):")
+        print(tree)
+
+    instructions = _run_ir_generator(tree)
+
+    print("[ir] Código Intermédio (sem otimização):")
+    for instr in instructions:
+        print(f"  {instr}")
+
+    return instructions
+
+
+def run_opt(source: str, filename: str, source_format: str, debug: bool):
+    """Mostra a IR após otimização."""
+    _, parser = _build_pipeline(debug=debug)
+    tree = run_parse(source, filename, source_format, debug=False,
+                     parser=parser, emit_output=False)
+    tree = run_semantic(tree, filename, emit_output=False)
+
+    instructions = _run_ir_generator(tree)
+
+    from src.optimizer import optimize
+    optimized = optimize(instructions)
+
+    removed = len(instructions) - len(optimized)
+    print(f"[opt] {len(instructions)} instruções → {len(optimized)} ({removed} eliminadas)")
+    for instr in optimized:
+        print(f"  {instr}")
+
+    return optimized
+
+
+def run_codegen(source: str, filename: str, source_format: str, debug: bool):
+    _, parser = _build_pipeline(debug=debug)
+    tree = run_parse(source, filename, source_format, debug=False,
+                     parser=parser, emit_output=False)
+    tree = run_semantic(tree, filename, emit_output=False)
+
+    instructions = _run_ir_generator(tree)
+
+    # Aplica otimizações antes da geração de código
+    from src.optimizer import optimize
+    optimized = optimize(instructions)
+
+    if debug:
+        print("[codegen] IR otimizado (debug):")
+        for instr in optimized:
+            print(f"  {instr}")
+
+    from src.codegen.ewvm import EWVMGenerator
+    backend = EWVMGenerator.from_program(tree)
+    code = backend.generate(optimized)
+    print(code)
+    return code
 
 
 def main():
@@ -222,19 +239,17 @@ def main():
 
         if args.stage == "sem":
             _, parser = _build_pipeline(debug=args.debug)
-            tree = run_parse(
-                source,
-                args.input,
-                resolved_format,
-                debug=False,
-                parser=parser,
-                emit_output=False,
-            )
+            tree = run_parse(source, args.input, resolved_format,
+                             debug=False, parser=parser, emit_output=False)
             run_semantic(tree, args.input, emit_output=True)
             return
-        
+
         if args.stage == "ir":
             run_ir(source, args.input, resolved_format, args.debug)
+            return
+
+        if args.stage == "opt":
+            run_opt(source, args.input, resolved_format, args.debug)
             return
 
         if args.stage == "codegen":

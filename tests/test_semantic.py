@@ -72,6 +72,19 @@ class TestSemanticBasics:
 
         assert "Atribuição inválida" in str(exc_info.value)
 
+    def test_atribuicao_numerica_com_conversao_implicita_e_valida(self, parser):
+        src = """PROGRAM P
+                 INTEGER I
+                 REAL R
+                 I = 2.9
+                 R = I
+                 END
+              """
+        tree = analyze_str(parser, src)
+
+        assert tree.symbol_table.lookup("I").type_name == "INTEGER"
+        assert tree.symbol_table.lookup("R").type_name == "REAL"
+
 
 class TestSemanticArrays:
 
