@@ -93,7 +93,9 @@ Se imprimir tokens, a instalação está funcional.
 ```bash
 make lex FIXTURE=tests/fixtures/hello.f
 make parse FIXTURE=tests/fixtures/fatorial.f
+make sem FIXTURE=tests/fixtures/fatorial.f
 make ir FIXTURE=tests/fixtures/primo.f
+make opt FIXTURE=tests/fixtures/continuation.f FORMAT=fixed
 make codegen FIXTURE=tests/fixtures/hello.f FORMAT=free
 ```
 
@@ -120,7 +122,7 @@ python -m src --stage <fase> [--format auto|fixed|free] [--debug] <ficheiro>
 
 ### Sintaxe dos argumentos
 
-- `--stage`: fase do pipeline (`lex`, `parse`, `ir`, `sem`, `codegen`)
+- `--stage`: fase do pipeline (`lex`, `parse`, `sem`, `ir`, `opt`, `codegen`)
 - `--format`: formato do fonte (`auto` por omissão, ou `fixed`/`free`)
 - `--debug`: saída detalhada para depuração
 - `<ficheiro>`: caminho para o `.f`
@@ -192,9 +194,25 @@ Uso típico:
 
 - verificar tradução de `IF`, `DO`, `GOTO`;
 - validar labels e saltos;
-- preparar futura integração com backend EWVM.
+- inspecionar a forma intermédia antes da otimização e do backend EWVM.
 
-##### 5) Geração de código EWVM (`--stage codegen`)
+##### 5) Otimização de IR (`--stage opt`)
+
+Executa lexer + parser + análise semântica + geração de IR + otimização e imprime a IR otimizada.
+
+Exemplo:
+
+```bash
+python -m src --stage opt --format fixed tests/fixtures/continuation.f
+```
+
+Uso típico:
+
+- confirmar constant folding e constant propagation;
+- observar eliminação de código morto após `GOTO`, `STOP` ou `RETURN`;
+- comparar IR bruta (`--stage ir`) com IR otimizada (`--stage opt`).
+
+##### 6) Geração de código EWVM (`--stage codegen`)
 
 Executa lexer + parser + análise semântica + gerador de IR + backend EWVM e imprime o código alvo.
 
@@ -207,10 +225,10 @@ python -m src --stage codegen --format free tests/fixtures/hello.f
 Uso típico:
 
 - verificar a tradução final de `PRINT`, `READ`, `IF`, `DO` e `GOTO`;
-- confirmar alocação global (`ALLOC`) e acessos a memória (`PUSHG`/`POPG`);
+- confirmar alocação global (`PUSHI`, `ALLOC`) e acessos a memória (`PUSHG`, `STOREG`, `LOAD`, `STORE`);
 - preparar validação end-to-end na VM fornecida pelo docente.
 
-##### 6) Formato de fonte (`--format`)
+##### 7) Formato de fonte (`--format`)
 
 Por omissão o compilador usa `auto`, com deteção heurística entre `fixed` e `free`.
 Quando quiseres forçar explicitamente um formato, usa `--format fixed` ou `--format free`.
@@ -246,6 +264,8 @@ make test-parser
 make test-ir
 make test-codegen
 ```
+
+Os ficheiros EWVM esperados para os exemplos estão em `tests/expected_vm/` e são verificados pela suíte.
 
 Alternativa direta:
 

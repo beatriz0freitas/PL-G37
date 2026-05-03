@@ -16,7 +16,7 @@
 | Representação Intermédia (AST -> IR) | ✅ Implementada |
 | Tradução de Código (IR -> EWVM)      | ✅ Implementada |
 | Otimização (valorização)            | ✅ Implementada |
-| Testes                                  | ✅ 181/181      |
+| Testes                                  | ✅ 208/208      |
 
 ---
 
@@ -33,6 +33,7 @@
 * [X] Operadores aritméticos, relacionais e lógicos
 * [X] Suporte a fixed-form e free-form
 * [X] Pré-processamento de labels e continuações
+* [X] Labels numéricos também em free-form (`10 CONTINUE`)
 
 **Validação:**
 
@@ -76,6 +77,7 @@
 * [X] Validação de uso antes de declaração
 * [X] Validação de uso antes de inicialização
 * [X] Verificação de tipos em atribuições e expressões
+* [X] Conversões numéricas implícitas simples entre `INTEGER`, `REAL` e `DOUBLE PRECISION`
 * [X] Validação de labels em `GOTO` e `DO ... CONTINUE`
 * [X] Anotação da AST com `sem_type` e símbolo associado
 * [X] Resolução da ambiguidade `CallExpr` vs `ArrayRef`
@@ -134,10 +136,13 @@
 * [X] Operações aritméticas, relacionais e lógicas
 * [X] `READ`, `PRINT`, `WRITE`
 * [X] Suporte a arrays
+* [X] Conversões EWVM (`ITOF`, `FTOI`, `ATOF`) para operações mistas inteiro/real
+* [X] `CONCAT` emitido na ordem documentada pela pilha da EWVM
 * [X] Suporte a intrínsecas base como `MOD`, `INT`, `REAL`, `FLOAT`, `ABS`, `SQRT`, `MAX`, `MIN`
 * [X] Convenção de chamada para funções/subrotinas do utilizador
 * [X] Frames de ativação com `FP` para parâmetros, locais e retorno
 * [X] Emissão de labels dedicadas para subprogramas
+* [X] Ficheiros VM esperados em `tests/expected_vm/`
 
 **Validação:**
 
@@ -152,30 +157,30 @@
 **Implementado:**
 
 * [X] **Constant Folding** — avalia IROp/IRUnaryOp com operandos literais em tempo de compilação (ex: `3 + 4 → 7`); protege contra divisão por zero
-* [X] **Constant Propagation** — propaga literais atribuídos a temporários e variáveis simples para os usos seguintes; limpa o ambiente conservativamente em labels e fronteiras de subprograma
+* [X] **Constant Propagation** — propaga literais atribuídos a temporários para os usos seguintes; preserva variáveis de utilizador para não perder informação de tipo no backend
 * [X] **Dead Code Elimination** — remove instruções após `JUMP`, `STOP` ou `RETURN` até ao próximo label; preserva marcadores estruturais `IRProcBegin`/`IRProcEnd`
-* [X] Pipeline público `optimize(instructions)` com ordem: propagação → folding → propagação → DCE
+* [X] Pipeline público `optimize(instructions)` com ordem: propagação → folding → propagação → folding → propagação → DCE
 * [X] Integrado na CLI: `--stage opt` mostra a IR otimizada; `--stage codegen` aplica otimização antes da geração EWVM
 
 **Exemplo de efeito:**
 
 ```
 ; Antes
-X = 3
-t1 = X + 4
-Y = t1
-PRINT t1
+t1 = 1 + 2
+t2 = t1 + 3
+A = t2
+PRINT A
 
 ; Depois
-X = 3
-t1 = 7
-Y = 7
-PRINT 7
+t1 = 3
+t2 = 6
+A = 6
+PRINT A
 ```
 
 **Validação:**
 
-* [X] `tests/test_optimizer.py` (14 testes)
+* [X] `tests/test_optimizer.py` (29 testes)
 
 ---
 
@@ -183,14 +188,14 @@ PRINT 7
 
 | Ficheiro                       | Resultado  |
 | ------------------------------ | ---------- |
-| `tests/test_lexer.py`        | ✅ 98/98   |
-| `tests/test_parser_smoke.py` | ✅ 20/20   |
-| `tests/test_semantic.py`     | ✅ 13/13   |
+| `tests/test_lexer.py`        | ✅ 102/102 |
+| `tests/test_parser_smoke.py` | ✅ 25/25   |
+| `tests/test_semantic.py`     | ✅ 14/14   |
 | `tests/test_ir.py`           | ✅ 9/9     |
-| `tests/test_codegen.py`      | ✅ 27/27   |
-| `tests/test_cli.py`          | ✅ 3/3     |
-| `tests/test_optimizer.py`    | ✅ 14/14   |
-| **Total**                | ✅ 184/184 |
+| `tests/test_codegen.py`      | ✅ 20/20   |
+| `tests/test_cli.py`          | ✅ 9/9     |
+| `tests/test_optimizer.py`    | ✅ 29/29   |
+| **Total**                | ✅ 208/208 |
 
 > **Nota:** `test_codegen.py` usa o helper interno `gen_code()` que não passa pelo optimizer (IR bruta → backend), portanto os testes de codegen não são afetados pela otimização. A integração do optimizer no pipeline completo é testada em `test_optimizer.py`.
 
@@ -204,12 +209,12 @@ O pipeline completo é:
 lexer → parser → semantic → IR → optimizer → EWVM
 ```
 
-Todas as etapas estão implementadas. O optimizer aplica três passes clássicos (constant propagation, constant folding, dead code elimination) que reduzem o número de instruções em programas com expressões constantes e código inalcançável.
+Todas as etapas estão implementadas. O optimizer aplica passes clássicos (constant propagation, constant folding, dead code elimination) que reduzem o número de instruções em programas com expressões constantes e código inalcançável.
 
 ### Limites funcionais conhecidos
 
 1. Sem `IMPLICIT NONE` efetivo (token reconhecido, regra semântica não aplicada).
-2. Sem coerções implícitas gerais; compatibilidade de tipos é estrita.
+2. Conversões numéricas simples suportadas; não há coerções avançadas para `CHARACTER`/`LOGICAL`.
 3. Sem otimizações avançadas de IR (propagação de cópias, eliminação de subexpressões comuns, inlining).
-4. Sem execução automática da VM do docente no pipeline de testes.
+4. Sem execução automática remota da VM do docente no pipeline de testes; há comparação automática do texto EWVM gerado com `tests/expected_vm/`.
 5. Sem procedimentos internos nem passagem de argumentos por referência completa.

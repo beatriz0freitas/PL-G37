@@ -62,7 +62,7 @@ src/
 │   ├── symbols.py       # Tabela de símbolos
 │   ├── intrinsics.py    # Assinaturas de intrínsecas
 │   └── types.py         # Conjuntos auxiliares de tipos
-├── optimizer.py         # Optimizações IR [esqueleto]
+├── optimizer.py         # Optimizações IR
 ├── cli.py               # Interface de linha de comando
 ├── config.py            # Configuração global
 └── __main__.py          # Entry point `python -m src`
@@ -354,7 +354,7 @@ L1:              (IRLabelInstr)
 GOTO L3          (IRJump)
 ```
 
-**Por quê TAC em vez de stack-based IR?**: A EWVM é stack-based, mas produzir directamente código de stack durante o parsing tornaria impossível optimizações futuras. O TAC é uma IR de nível mais alto que permite propagação de constantes, eliminação de subexpressões comuns, etc. A tradução TAC → EWVM é feita (futuramente) no backend `codegen/ewvm.py`.
+**Por quê TAC em vez de stack-based IR?**: A EWVM é stack-based, mas produzir directamente código de stack durante o parsing tornaria muito mais difícil aplicar otimizações. O TAC é uma IR de nível mais alto que permite propagação de constantes, folding e eliminação de código morto antes da tradução final no backend `codegen/ewvm_generator.py`.
 
 **Alternativa não adoptada**: produzir directamente código EWVM durante a travessia da AST (sem IR intermédia). Seria a abordagem mais simples, mas impossibilitaria qualquer optimização e dificultaria o teste isolado do gerador de código.
 
@@ -466,7 +466,7 @@ Hierarquia simples de excepções:
 CompileError(Exception)
 ├── LexError
 ├── ParseError
-└── SemanticError   [reservado para fase futura]
+└── SemanticError
 ```
 
 Cada erro carrega um `SourceLocation(filename, line, column)` que permite produzir mensagens no formato canónico dos compiladores:
@@ -487,6 +487,7 @@ O CLI aceita as seguintes fases via `--stage`:
 | `--stage parse`   | Corre lexer + parser e imprime resumo da AST            |
 | `--stage ir`      | Corre até à geração de IR e imprime as instruções |
 | `--stage sem`     | Análise semântica e validação da AST anotada         |
+| `--stage opt`     | Mostra a IR otimizada                                   |
 | `--stage codegen` | Pipeline completo até EWVM                           |
 
 O formato fixo/livre é controlado por `--format fixed|free|auto` (default: `auto`).
@@ -505,16 +506,17 @@ As fixtures de programas Fortran em `tests/fixtures/` servem de casos de teste d
 
 ## 7. Testes e Validação
 
-### Estado actual: 167/167 testes a passar
+### Estado actual: 208/208 testes a passar
 
 | Ficheiro                 | Testes | Cobertura                                                               |
 | ------------------------ | ------ | ----------------------------------------------------------------------- |
-| `test_lexer.py`        | 98     | Tokens, keywords, literais, operadores, fixed/free form, linenos, erros |
-| `test_parser_smoke.py` | 20     | AST shape, declarações, instruções, subprogramas, erros sintáticos |
-| `test_semantic.py`     | 13     | Declarações, tipos, labels, arrays, assinaturas e aridade de subprogramas |
+| `test_lexer.py`        | 102    | Tokens, keywords, literais, operadores, fixed/free form, labels, erros |
+| `test_parser_smoke.py` | 25     | AST shape, declarações, instruções, subprogramas, erros sintáticos |
+| `test_semantic.py`     | 14     | Declarações, tipos, conversões numéricas, labels, arrays e subprogramas |
 | `test_ir.py`           | 9      | Atribuições, IFs, DOs, GOTOs, arrays, I/O, calls e lowering de subprogramas |
-| `test_codegen.py`      | 9      | Backend EWVM, arrays, intrínsecas e convenção de chamada |
-| `test_cli.py`          | 3      | Execução por estágios via CLI |
+| `test_codegen.py`      | 20     | Backend EWVM, arrays, intrínsecas, conversões e convenção de chamada |
+| `test_cli.py`          | 9      | Execução por estágios, labels free-form e artefactos `.vm` esperados |
+| `test_optimizer.py`    | 29     | Folding, propagação, DCE e pipeline completo |
 
 ### Fixtures de referência
 
@@ -549,17 +551,21 @@ O backend já mapeia a IR para EWVM, incluindo:
 
 - gestão da stack de operandos;
 - modelo de memória global para escalares, arrays, temporários e auxiliares;
+- emissão de `START` após a reserva da zona global, como nos exemplos da EWVM;
+- conversões `ITOF`/`FTOI`/`ATOF` para operações mistas e leitura real;
+- concatenação de strings na ordem documentada pela EWVM;
 - intrínsecas suportadas (`MOD`, `INT`, `REAL`, `FLOAT`, `ABS`, `SQRT`, `MAX`, `MIN`);
 - convenção explícita de chamada para subprogramas definidos pelo utilizador;
 - emissão de labels, `CALL` e `RETURN`.
 
-### Pendente — Optimizações (`src/optimizer.py`)
+### Implementado — Optimizações (`src/optimizer.py`)
 
 Optimizações clássicas sobre a IR (valorização):
 
-- **Propagação de constantes**: substituir `t1 = 3; t2 = t1 + 4` por `t2 = 7`
-- **Eliminação de código morto**: remover instruções cujo resultado nunca é usado
-- **Peephole optimization**: simplificações locais na IR antes da tradução para EWVM
+- **Constant propagation** em temporários, preservando variáveis de utilizador para manter tipos no backend;
+- **Constant folding** para operações binárias/unárias com literais;
+- **Dead code elimination** após `JUMP`, `STOP` e `RETURN`;
+- Pipeline: propagação → folding → propagação → folding → propagação → DCE.
 
 ---
 
@@ -586,9 +592,9 @@ Optimizações clássicas sobre a IR (valorização):
 Para evitar sobredeclaração de suporte, ficam explícitos os limites observados no código atual:
 
 1. **Sem `IMPLICIT NONE` efetivo** (token reconhecido, mas sem regra semântica aplicada).
-2. **Sem coerções implícitas gerais** na fase semântica; a validação atual privilegia compatibilidade estrita entre tipos.
-3. **Sem otimização IR/EWVM**: o código gerado ainda reserva e inicializa mais slots do que o necessário.
-4. **Sem execução automática da VM do docente** no pipeline de testes.
+2. **Coerções numéricas simples suportadas**; não há coerções avançadas para `CHARACTER`/`LOGICAL`.
+3. **Sem otimizações avançadas de IR/EWVM**: não há CSE, inlining, compactação de frames nem eliminação geral de temporários mortos.
+4. **Sem execução automática remota da VM do docente** no pipeline de testes; há comparação automática do EWVM gerado com `tests/expected_vm/`.
 5. **Sem procedimentos internos nem argumentos por referência completos**; o suporte atual cobre subprogramas externos do subconjunto usado no projeto.
 6. **Sem otimização específica de frames**: o backend já usa `FP`, mas ainda não minimiza slots locais/temporários nem faz compactação de ativação.
 
@@ -609,9 +615,9 @@ Definição prática de “done” para a versão de entrega:
 3. Testes novos:
 
 - `tests/test_semantic.py`;
-- testes de codegen com comparação de output EWVM esperado.
+- testes de codegen e CLI com comparação de output EWVM esperado.
 
-4. Inclusão no repositório de exemplos `.f` + respetivos `.vm` (requisito explícito do enunciado).
+4. Inclusão no repositório de exemplos `.f` + respetivos `.vm` em `tests/expected_vm/` (requisito explícito do enunciado).
 
 ---
 
@@ -625,9 +631,11 @@ Sequência mínima para reproduzir o estado atual:
 
 - `--stage lex` em `hello.f` / `primo.f`;
 - `--stage parse` em `fatorial.f`;
-- `--stage ir` em `primo.f`.
+- `--stage ir` em `primo.f`;
+- `--stage opt` em `continuation.f`;
+- `--stage codegen` em `hello.f`, `fatorial.f`, `primo.f`, `somaarr.f` e `conversor.f`.
 
-Esta rotina garante verificação funcional sem depender de componentes ainda pendentes (semântica/codegen).
+Esta rotina garante verificação funcional do pipeline completo; a execução interativa final continua a ser feita na interface web da EWVM do docente.
 
 ---
 
