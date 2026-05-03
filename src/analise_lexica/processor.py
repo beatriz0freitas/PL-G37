@@ -6,8 +6,11 @@ numa lista de LogicalLine, resolvendo:
   - continuações de linha
   - extração de labels numéricos
 """
+import re
 
 from src.errors import LexError, SourceLocation
+
+_FREE_LABEL_RE = re.compile(r"^\s*(\d+)\s+(.+)$")
 
 
 class LogicalLine:
@@ -99,6 +102,7 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
     result: list[LogicalLine] = []
     cur_code: str | None = None
     cur_lineno = 0
+    cur_label: int | None = None
 
     for lineno, raw in enumerate(source.splitlines(), start=1):
         line = raw.rstrip("\r\n")
@@ -106,12 +110,20 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
         # Remover comentário inline !
         in_str = False
         clean: list[str] = []
-        for ch in line:
+        i = 0
+        while i < len(line):
+            ch = line[i]
             if ch == "'":
+                if in_str and i + 1 < len(line) and line[i + 1] == "'":
+                    clean.append(ch)
+                    clean.append(line[i + 1])
+                    i += 2
+                    continue
                 in_str = not in_str
             if ch == "!" and not in_str:
                 break
             clean.append(ch)
+            i += 1
         line = "".join(clean).rstrip()
 
         if not line:
@@ -122,16 +134,23 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
             line = line[:-1].rstrip()
 
         if cur_code is None:
+            label_match = _FREE_LABEL_RE.match(line)
+            cur_label = None
+            if label_match:
+                cur_label = int(label_match.group(1))
+                line = label_match.group(2).lstrip()
+
             cur_code   = line
             cur_lineno = lineno
         else:
             cur_code += " " + line
 
         if not cont:
-            result.append(LogicalLine(cur_code, cur_lineno, None))
+            result.append(LogicalLine(cur_code, cur_lineno, cur_label))
             cur_code = None
+            cur_label = None
 
     if cur_code is not None:
-        result.append(LogicalLine(cur_code, cur_lineno, None))
+        result.append(LogicalLine(cur_code, cur_lineno, cur_label))
 
     return result
