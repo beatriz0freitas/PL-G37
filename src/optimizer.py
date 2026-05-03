@@ -2,13 +2,14 @@
 
 Três passes, aplicados em sequência por ``optimize()``:
 
-  1. constant_propagation  — substitui Temp/variáveis por literais conhecidos
+  1. constant_propagation  — substitui temporários por literais conhecidos
   2. constant_folding      — avalia IROp/IRUnaryOp com operandos literais
   3. dead_code_elimination — remove instruções após saltos incondicionais
 
 A ordem propagação → folding → propagação cobre o caso típico em que uma
-variável constante é usada numa expressão que, após substituição, fica
-totalmente constante e pode ser dobrada num único literal.
+temporário constante é usado numa expressão que, após substituição, fica
+totalmente constante e pode ser dobrada num único literal. O ciclo é repetido
+uma vez para cobrir cadeias curtas de temporários produzidas pela própria IR.
 """
 
 from __future__ import annotations
@@ -48,8 +49,6 @@ def _env_key(v: Any) -> str | None:
     """Chave de pesquisa no ambiente de constantes; None se não aplicável."""
     if isinstance(v, Temp):
         return str(v)
-    if isinstance(v, str):
-        return v
     return None
 
 
@@ -125,10 +124,12 @@ def constant_folding(instructions: list[IRInstr]) -> list[IRInstr]:
 # ---------------------------------------------------------------------------
 
 def constant_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
-    """Propaga literais atribuídos a Temp/variáveis para os seus usos seguintes.
+    """Propaga literais atribuídos a temporários para os seus usos seguintes.
 
     O ambiente é limpo conservativamente em IRLabelInstr (ponto de junção
     de fluxo), IRProcBegin e IRProcEnd (fronteiras de escopo).
+    Variáveis de utilizador não são propagadas para não perder informação de
+    tipo necessária ao backend EWVM.
     """
 
     def subst(v: Any) -> Any:
@@ -258,11 +259,14 @@ def optimize(instructions: list[IRInstr]) -> list[IRInstr]:
     """Aplica os três passes de otimização em sequência.
 
     Ordem:
-      propagação → folding → propagação → eliminação de código morto
+      propagação → folding → propagação → folding → propagação → DCE
 
     A segunda passagem de propagação garante que os literais produzidos pelo
-    folding sejam também substituídos nos usos seguintes.
+    folding sejam também substituídos nos usos seguintes; o segundo folding
+    trata expressões que só ficam constantes depois dessa propagação.
     """
+    instructions = constant_propagation(instructions)
+    instructions = constant_folding(instructions)
     instructions = constant_propagation(instructions)
     instructions = constant_folding(instructions)
     instructions = constant_propagation(instructions)
