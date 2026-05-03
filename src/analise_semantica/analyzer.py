@@ -12,6 +12,9 @@ from .symbols import Symbol, SymbolTable
 from .types import NUMERIC_TYPES
 
 
+REAL_LIKE_TYPES = {"REAL", "DOUBLE PRECISION"}
+
+
 class SemanticAnalyzer:
     """Valida e anota a AST antes da geracao de IR."""
 
@@ -431,7 +434,7 @@ class SemanticAnalyzer:
         if op in {"+", "-", "*", "/", "**"}:
             if left_type not in NUMERIC_TYPES or right_type not in NUMERIC_TYPES:
                 self._error(node.lineno, f"Operador '{node.op}' exige operandos numéricos")
-            result_type = "REAL" if "REAL" in {left_type, right_type} else "INTEGER"
+            result_type = "REAL" if {left_type, right_type} & REAL_LIKE_TYPES else "INTEGER"
             self._annotate(node, result_type)
             return node, result_type
 
@@ -483,7 +486,7 @@ class SemanticAnalyzer:
         if name in {"MAX", "MIN"}:
             if len(arg_types) != 2 or any(arg not in NUMERIC_TYPES for arg in arg_types):
                 self._error(lineno, f"{name} exige dois argumentos numéricos")
-            return "REAL" if "REAL" in arg_types else "INTEGER"
+            return "REAL" if set(arg_types) & REAL_LIKE_TYPES else "INTEGER"
 
         self._error(lineno, f"Intrínseca não suportada: {name}")
 
@@ -508,6 +511,8 @@ class SemanticAnalyzer:
 
     def _ensure_assignable(self, target_type: str, value_type: str, lineno: int) -> None:
         if target_type == value_type:
+            return
+        if target_type in NUMERIC_TYPES and value_type in NUMERIC_TYPES:
             return
         self._error(lineno, f"Atribuição inválida: esperado {target_type}, recebido {value_type}")
 

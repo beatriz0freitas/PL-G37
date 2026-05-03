@@ -30,6 +30,9 @@ from .decls import ArrayTypes, ScalarTypes, SubprogramInfo, extract_program_decl
 from .layout import FrameLayout, MemoryLayout
 
 
+REAL_LIKE_TYPES = {"REAL", "DOUBLE PRECISION"}
+
+
 class EWVMGenerator:
     """Traduz IR para texto EWVM."""
 
@@ -76,9 +79,9 @@ class EWVMGenerator:
         self._reserve_intrinsic_helpers(instructions)
         self._allocate_temporaries_and_implicit_scalars(instructions)
 
-        self.emit("START")
         self._emit_global_initialization()
         self._emit_array_allocations()
+        self.emit("START")
 
         for instr in instructions:
             self._translate(instr)
@@ -309,7 +312,7 @@ class EWVMGenerator:
                 return str(instr.dest), "CHARACTER"
             left_type = self._type_of(instr.left)
             right_type = self._type_of(instr.right)
-            if "REAL" in {left_type, right_type}:
+            if self._is_real_type(left_type) or self._is_real_type(right_type):
                 return str(instr.dest), "REAL"
             return str(instr.dest), "INTEGER"
 
@@ -319,8 +322,12 @@ class EWVMGenerator:
                 return str(instr.dest), "REAL"
             if name in {"MOD", "INT"}:
                 return str(instr.dest), "INTEGER"
-            if name in {"ABS", "MAX", "MIN"} and instr.args:
+            if name == "ABS" and instr.args:
                 return str(instr.dest), self._type_of(instr.args[0])
+            if name in {"MAX", "MIN"} and instr.args:
+                if any(self._is_real_type(self._type_of(arg)) for arg in instr.args):
+                    return str(instr.dest), "REAL"
+                return str(instr.dest), "INTEGER"
             if name in self.subprograms:
                 info = self.subprograms[name]
                 result_name = info.result_name or name
@@ -340,11 +347,22 @@ class EWVMGenerator:
                 self.emit("JZ", self._label_name(false_label))
                 self.emit("JUMP", self._label_name(true_label))
             case IRAssign(dest=dest, src=src):
-                self._push_value(src)
+                self._push_value_for_target(src, dest)
                 self._pop_to(dest)
             case IROp(op=op, dest=dest, left=left, right=right):
-                self._push_value(left)
-                self._push_value(right)
+                if op == "CONCAT":
+                    # A EWVM documenta CONCAT como n + m, ao contrário da
+                    # família aritmética m op n. Para Fortran A // B empilhamos
+                    # B e depois A.
+                    self._push_value(right)
+                    self._push_value(left)
+                    self.emit("CONCAT")
+                    self._pop_to(dest)
+                    return
+
+                real_stack = self._op_uses_real_stack(op, left, right)
+                self._push_numeric_value(left, as_real=real_stack)
+                self._push_numeric_value(right, as_real=real_stack)
                 self.emit(self._binary_opcode(op, left, right))
                 if op in {"!=", "NEQV"}:
                     self.emit("NOT")
@@ -371,7 +389,7 @@ class EWVMGenerator:
                 self._pop_to(dest)
             case IRStoreArray(name=name, indices=indices, src=src):
                 self._push_array_address(name, indices)
-                self._push_value(src)
+                self._push_value_for_type(src, self._active_array_types()[name][0])
                 self.emit("STORE", 0)
             case IRStop():
                 self.emit("STOP")
@@ -387,7 +405,7 @@ class EWVMGenerator:
             typename = self._type_of(arg)
             if self._is_string_literal(arg) or typename == "CHARACTER":
                 self.emit("WRITES")
-            elif typename == "REAL":
+            elif self._is_real_type(typename):
                 self.emit("WRITEF")
             else:
                 self.emit("WRITEI")
@@ -399,7 +417,7 @@ class EWVMGenerator:
             if isinstance(target, IRArrayRef):
                 self._push_array_address(target.name, target.indices)
                 self.emit("READ")
-                if typename == "REAL":
+                if self._is_real_type(typename):
                     self.emit("ATOF")
                 elif typename != "CHARACTER":
                     self.emit("ATOI")
@@ -407,7 +425,7 @@ class EWVMGenerator:
                 continue
 
             self.emit("READ")
-            if typename == "REAL":
+            if self._is_real_type(typename):
                 self.emit("ATOF")
             elif typename != "CHARACTER":
                 self.emit("ATOI")
@@ -422,9 +440,9 @@ class EWVMGenerator:
             self.emit("MOD")
         elif upper in {"REAL", "FLOAT", "INT"}:
             self._push_value(args[0])
-            if upper in {"REAL", "FLOAT"} and self._type_of(args[0]) != "REAL":
+            if upper in {"REAL", "FLOAT"} and not self._is_real_type(self._type_of(args[0])):
                 self.emit("ITOF")
-            elif upper == "INT" and self._type_of(args[0]) == "REAL":
+            elif upper == "INT" and self._is_real_type(self._type_of(args[0])):
                 self.emit("FTOI")
         elif upper in {"ABS", "SQRT", "MAX", "MIN"}:
             self._translate_intrinsic_call(upper, args)
@@ -432,8 +450,14 @@ class EWVMGenerator:
             info = self.subprograms.get(upper)
             if info is None:
                 raise NotImplementedError(f"Subprograma sem metadados: {upper}")
-            for arg in args:
-                self._push_value(arg)
+            for idx, arg in enumerate(args):
+                param_type = None
+                if idx < len(info.params):
+                    param_type = info.scalar_types.get(info.params[idx])
+                if param_type is None:
+                    self._push_value(arg)
+                else:
+                    self._push_value_for_type(arg, param_type)
             self.emit("PUSHI", 0)
             self.emit("PUSHA", upper)
             self.emit("CALL")
@@ -493,43 +517,43 @@ class EWVMGenerator:
         raise NotImplementedError(f"Intrínseca sem tradução: {name}")
 
     def _emit_abs(self, arg: Any) -> None:
-        is_real = self._type_of(arg) == "REAL"
+        is_real = self._is_real_type(self._type_of(arg))
         keep_label = self._new_backend_label("ABS_KEEP")
         end_label = self._new_backend_label("ABS_END")
 
-        self._push_value(arg)
+        self._push_numeric_value(arg, as_real=is_real)
         self.emit("PUSHF" if is_real else "PUSHI", 0.0 if is_real else 0)
         self.emit("FINF" if is_real else "INF")
         self.emit("JZ", self._label_name(keep_label))
 
-        self._push_value(arg)
+        self._push_numeric_value(arg, as_real=is_real)
         self.emit("PUSHF" if is_real else "PUSHI", 0.0 if is_real else 0)
         self.emit("SWAP")
         self.emit("FSUB" if is_real else "SUB")
         self.emit("JUMP", self._label_name(end_label))
 
         self.emit_label(keep_label)
-        self._push_value(arg)
+        self._push_numeric_value(arg, as_real=is_real)
         self.emit_label(end_label)
 
     def _emit_max_min(self, left: Any, right: Any, *, want_max: bool) -> None:
-        is_real = "REAL" in {self._type_of(left), self._type_of(right)}
+        is_real = self._is_real_type(self._type_of(left)) or self._is_real_type(self._type_of(right))
         take_left_label = self._new_backend_label("MM_LEFT")
         end_label = self._new_backend_label("MM_END")
 
-        self._push_value(left)
-        self._push_value(right)
+        self._push_numeric_value(left, as_real=is_real)
+        self._push_numeric_value(right, as_real=is_real)
         if want_max:
             self.emit("FSUPEQ" if is_real else "SUPEQ")
         else:
             self.emit("FINFEQ" if is_real else "INFEQ")
         self.emit("JZ", self._label_name(take_left_label))
 
-        self._push_value(left)
+        self._push_numeric_value(left, as_real=is_real)
         self.emit("JUMP", self._label_name(end_label))
 
         self.emit_label(take_left_label)
-        self._push_value(right)
+        self._push_numeric_value(right, as_real=is_real)
         self.emit_label(end_label)
 
     def _emit_sqrt(self, arg: Any) -> None:
@@ -544,7 +568,7 @@ class EWVMGenerator:
         end_label = self._new_backend_label("SQRT_END")
 
         self._push_value(arg)
-        if self._type_of(arg) != "REAL":
+        if not self._is_real_type(self._type_of(arg)):
             self.emit("ITOF")
         self._pop_to(arg_name)
 
@@ -614,7 +638,7 @@ class EWVMGenerator:
             ">": "FSUP",
             ">=": "FSUPEQ",
         }
-        is_real = "REAL" in {self._type_of(left), self._type_of(right)}
+        is_real = self._op_uses_real_stack(op, left, right)
         if op in cmp_ops:
             return real_cmp_ops[op] if is_real else cmp_ops[op]
         if op == "==":
@@ -644,14 +668,14 @@ class EWVMGenerator:
             "/": ("DIV", "FDIV"),
         }
         int_op, real_op = arithmetic[op]
-        return real_op if "REAL" in {self._type_of(left), self._type_of(right)} else int_op
+        return real_op if is_real else int_op
 
     def _emit_unary(self, op: str, operand: Any) -> None:
         if op == "NOT":
             self.emit("NOT")
             return
         if op == "NEG":
-            if self._type_of(operand) == "REAL":
+            if self._is_real_type(self._type_of(operand)):
                 self.emit("PUSHF", 0.0)
                 self.emit("SWAP")
                 self.emit("FSUB")
@@ -661,6 +685,33 @@ class EWVMGenerator:
                 self.emit("SUB")
             return
         raise NotImplementedError(f"Operador unário sem tradução: {op}")
+
+    def _push_value_for_target(self, value: Any, target: Any) -> None:
+        self._push_value_for_type(value, self._type_of(target))
+
+    def _push_value_for_type(self, value: Any, target_type: str) -> None:
+        self._push_value(value)
+        value_type = self._type_of(value)
+        if self._is_real_type(target_type) and value_type == "INTEGER":
+            self.emit("ITOF")
+            return
+        if target_type == "INTEGER" and self._is_real_type(value_type):
+            self.emit("FTOI")
+
+    def _push_numeric_value(self, value: Any, *, as_real: bool) -> None:
+        self._push_value(value)
+        if as_real and self._type_of(value) == "INTEGER":
+            self.emit("ITOF")
+
+    def _op_uses_real_stack(self, op: str, left: Any, right: Any) -> bool:
+        numeric_ops = {"+", "-", "*", "/", "<", "<=", ">", ">=", "==", "!="}
+        if op not in numeric_ops:
+            return False
+        return self._is_real_type(self._type_of(left)) or self._is_real_type(self._type_of(right))
+
+    @staticmethod
+    def _is_real_type(type_name: str) -> bool:
+        return type_name in REAL_LIKE_TYPES
 
     def _push_value(self, value: Any) -> None:
         if isinstance(value, bool):
