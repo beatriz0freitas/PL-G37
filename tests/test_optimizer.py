@@ -138,13 +138,13 @@ class TestConstantPropagation:
         result = constant_propagation(ir)
         assert result[1].left == 42  # t1 substituído por 42
 
-    def test_propagate_named_var_into_op(self):
+    def test_nao_propaga_variavel_nomeada_para_preservar_tipo(self):
         ir = [
             IRAssign(dest="X", src=10),
             IROp(op="*", dest=t(1), left="X", right=2),
         ]
         result = constant_propagation(ir)
-        assert result[1].left == 10  # X substituído por 10
+        assert result[1].left == "X"
 
     def test_clear_env_at_label(self):
         """Após um label, o ambiente é limpo (ponto de junção conservativo)."""
@@ -167,15 +167,15 @@ class TestConstantPropagation:
         result = constant_propagation(ir)
         assert result[2].left == t(1)
 
-    def test_invalidate_on_reassign(self):
-        """Reatribuição invalida o valor anterior."""
+    def test_reassign_de_variavel_nomeada_nao_cria_constante(self):
+        """Variáveis de utilizador ficam explícitas por causa dos tipos."""
         ir = [
             IRAssign(dest="X", src=1),
             IRAssign(dest="X", src=2),
             IROp(op="+", dest=t(1), left="X", right=0),
         ]
         result = constant_propagation(ir)
-        assert result[2].left == 2  # Propaga o valor mais recente (2)
+        assert result[2].left == "X"
 
     def test_propagate_into_cjump(self):
         ir = [
@@ -279,18 +279,31 @@ class TestDeadCodeElimination:
 class TestOptimizePipeline:
 
     def test_propagation_then_folding(self):
-        """Propagação + folding: X=3, Y=4, t=X+Y → t=7 como literal."""
+        """Propagação + folding: t1=3, t2=4, t3=t1+t2 → 7."""
         ir = [
-            IRAssign(dest="X", src=3),
-            IRAssign(dest="Y", src=4),
-            IROp(op="+", dest=t(1), left="X", right="Y"),
-            IRPrint(args=[t(1)]),
+            IRAssign(dest=t(1), src=3),
+            IRAssign(dest=t(2), src=4),
+            IROp(op="+", dest=t(3), left=t(1), right=t(2)),
+            IRPrint(args=[t(3)]),
             IRStop(),
         ]
         result = optimize(ir)
         # PRINT deve usar o literal 7 directamente
         print_instr = next(i for i in result if isinstance(i, IRPrint))
         assert print_instr.args[0] == 7
+
+    def test_fold_after_second_propagation(self):
+        """Cadeias curtas de temporários ficam reduzidas a literal."""
+        ir = [
+            IROp(op="+", dest=t(1), left=1, right=2),
+            IROp(op="+", dest=t(2), left=t(1), right=3),
+            IRPrint(args=[t(2)]),
+        ]
+
+        result = optimize(ir)
+
+        print_instr = next(i for i in result if isinstance(i, IRPrint))
+        assert print_instr.args[0] == 6
 
     def test_dce_after_stop(self):
         ir = [

@@ -2,6 +2,9 @@
 
 import subprocess
 import sys
+from pathlib import Path
+
+import pytest
 
 from src.cli import detect_source_format
 
@@ -25,7 +28,7 @@ class TestFormatDetection:
 
 class TestCliHints:
 
-    def test_cli_sugere_fixed_quando_free_falha_em_fixture_fixed(self):
+    def test_cli_aceita_labels_numericos_tambem_em_free_form(self):
         result = subprocess.run(
             [
                 sys.executable,
@@ -42,6 +45,38 @@ class TestCliHints:
             check=False,
         )
 
-        assert result.returncode != 0
-        assert "parece estar em formato 'fixed'" in result.stderr
-        assert "--format fixed" in result.stderr
+        assert result.returncode == 0
+        assert "F10:" in result.stdout
+        assert "STOP" in result.stdout
+
+
+class TestExpectedVmArtifacts:
+
+    @pytest.mark.parametrize("fixture,source_format", [
+        ("hello", "free"),
+        ("fatorial", "fixed"),
+        ("primo", "fixed"),
+        ("somaarr", "fixed"),
+        ("conversor", "fixed"),
+        ("continuation", "fixed"),
+    ])
+    def test_fixture_vm_esperado_esta_sincronizado(self, fixture, source_format):
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "src",
+                "--stage",
+                "codegen",
+                "--format",
+                source_format,
+                f"tests/fixtures/{fixture}.f",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        expected = Path(f"tests/expected_vm/{fixture}.vm").read_text(encoding="utf-8")
+        assert result.returncode == 0
+        assert result.stdout.strip() == expected.strip()

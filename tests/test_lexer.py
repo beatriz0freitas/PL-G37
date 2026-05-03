@@ -104,6 +104,13 @@ class TestFixturePrograms:
         assert "RETURN" in tipos
         assert any(lb.value == 20 for lb in labels)
 
+    def test_free_form_tambem_extrai_labels_no_inicio_da_linha(self, lexer):
+        toks = lex_str(lexer, "10 CONTINUE\n20 IF (.TRUE.) THEN\nENDIF\n", source_format="free")
+        labels = [tok.value for tok in toks if tok.type == "LABEL"]
+
+        assert labels == [10, 20]
+        assert token_types(toks).count("CONTINUE") == 1
+
 
 # ---------------------------------------------------------------------------
 # 2. Palavras-chave 
