@@ -189,6 +189,25 @@ class TestCodegenIntrinsics:
         assert "WRITEI" in code
 
 
+class TestCodegenPower:
+
+    def test_power_inteiro_gera_multiplicacao_repetida(self, parser):
+        src = """PROGRAM P
+                 INTEGER X
+                 X = 2 ** 3
+                 PRINT *, X
+                 END
+              """
+        code = gen_code(parse_str(parser, src))
+
+        assert "@POW" not in code
+        assert "POWTEST" in code
+        assert "POWEND" in code
+        assert "SUP" in code
+        assert "MUL" in code
+        assert "NotImplementedError" not in code
+
+
 class TestCodegenVmCompatibility:
 
     def test_neqv_nao_emite_instrucao_neq_inexistente(self, parser):

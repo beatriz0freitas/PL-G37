@@ -149,12 +149,20 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             isinstance(instr, IRCall) and instr.name.upper() == "SQRT"
             for instr in instructions
         )
-        if not needs_sqrt:
-            return
+        needs_pow = any(
+            isinstance(instr, IROp) and instr.op == "**"
+            for instr in instructions
+        )
 
-        self._reserve_helper_scalar("@SQRT_ARG", "REAL")
-        self._reserve_helper_scalar("@SQRT_GUESS", "REAL")
-        self._reserve_helper_scalar("@SQRT_ITER", "INTEGER")
+        if needs_sqrt:
+            self._reserve_helper_scalar("@SQRT_ARG", "REAL")
+            self._reserve_helper_scalar("@SQRT_GUESS", "REAL")
+            self._reserve_helper_scalar("@SQRT_ITER", "INTEGER")
+
+        if needs_pow:
+            self._reserve_helper_scalar("@POW_BASE", "INTEGER")
+            self._reserve_helper_scalar("@POW_EXP", "INTEGER")
+            self._reserve_helper_scalar("@POW_RESULT", "INTEGER")
 
     def _reserve_helper_scalar(self, name: str, typename: str) -> None:
         self._helper_scalars[name] = typename
@@ -282,6 +290,10 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
                 self._push_value_for_target(src, dest)
                 self._pop_to(dest)
             case IROp(op=op, dest=dest, left=left, right=right):
+                if op == "**":
+                    self._emit_integer_power(left, right, dest)
+                    return
+
                 if op == "CONCAT":
                     # A EWVM documenta CONCAT como n + m, ao contrário da
                     # família aritmética m op n. Para Fortran A // B empilhamos

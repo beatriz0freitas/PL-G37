@@ -85,6 +85,30 @@ class TestSemanticBasics:
         assert tree.symbol_table.lookup("I").type_name == "INTEGER"
         assert tree.symbol_table.lookup("R").type_name == "REAL"
 
+    def test_power_so_suporta_inteiros(self, parser):
+        src = """PROGRAM P
+                 INTEGER I
+                 REAL R
+                 R = 2.0
+                 I = 2 ** R
+                 END
+              """
+        with pytest.raises(SemanticError) as exc_info:
+            analyze_str(parser, src)
+
+        assert "suporta apenas base e expoente INTEGER" in str(exc_info.value)
+
+    def test_power_rejeita_expoente_negativo_literal(self, parser):
+        src = """PROGRAM P
+                 INTEGER I
+                 I = 2 ** -1
+                 END
+              """
+        with pytest.raises(SemanticError) as exc_info:
+            analyze_str(parser, src)
+
+        assert "não suporta expoentes negativos" in str(exc_info.value)
+
 
 class TestSemanticArrays:
 

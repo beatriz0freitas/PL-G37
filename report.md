@@ -76,13 +76,13 @@ Este tipo de saída facilita validação de precedências, saltos e estruturaç�
 
 A análise semântica constrói tabelas de símbolos para o programa principal e para cada subprograma. Esta fase rejeita declarações duplicadas, uso de identificadores não declarados, uso antes de inicialização, índices de array não inteiros, aridade incorreta em chamadas e labels inexistentes em `GOTO` ou `DO`.
 
-A resolução contextual de `ID(...)` é feita aqui: se o identificador for array, a expressão é convertida para `ArrayRef`; se for função declarada ou intrínseca, mantém-se como chamada. As atribuições aceitam conversões numéricas simples entre `INTEGER`, `REAL` e `DOUBLE PRECISION`, ficando a conversão concreta para o backend EWVM.
+A resolução contextual de `ID(...)` é feita aqui: se o identificador for array, a expressão é convertida para `ArrayRef`; se for função declarada ou intrínseca, mantém-se como chamada. As atribuições aceitam conversões numéricas simples entre `INTEGER`, `REAL` e `DOUBLE PRECISION`, ficando a conversão concreta para o backend EWVM. Para o operador de potência (`**`), o subconjunto suportado é deliberadamente restrito a `INTEGER ** INTEGER`; expoentes negativos literais e potências reais são rejeitados nesta fase para evitar falhas tardias no backend.
 
 ## 7. Geração de código EWVM
 
 O backend traduz a IR para a máquina virtual EWVM documentada pelos docentes. A zona global é reservada antes de `START`, seguindo os exemplos da VM, e é acedida com `PUSHG`/`STOREG`. Arrays são alocados com `ALLOC`, guardados como endereços e acedidos com `PADD`, `LOAD` e `STORE`.
 
-As operações inteiras usam `ADD`, `SUB`, `MUL`, `DIV`, `MOD` e comparadores inteiros; as operações reais usam `FADD`, `FSUB`, `FMUL`, `FDIV` e comparadores reais. O backend emite `ITOF`, `FTOI` e `ATOF` quando necessário, trata `READ`, `PRINT` e `WRITE`, e respeita a ordem de pilha documentada para `CONCAT`.
+As operações inteiras usam `ADD`, `SUB`, `MUL`, `DIV`, `MOD` e comparadores inteiros; as operações reais usam `FADD`, `FSUB`, `FMUL`, `FDIV` e comparadores reais. Como a EWVM documentada não disponibiliza uma instrução `POW`, a potência inteira (`INTEGER ** INTEGER`) é emitida como multiplicação repetida: o backend guarda base, expoente e resultado em auxiliares internos, inicializa o resultado a `1`, e multiplica enquanto o expoente for maior que zero. Expoentes negativos, expoentes reais e potências reais não pertencem ao subconjunto suportado. O backend emite `ITOF`, `FTOI` e `ATOF` quando necessário, trata `READ`, `PRINT` e `WRITE`, e respeita a ordem de pilha documentada para `CONCAT`.
 
 Subprogramas externos são traduzidos para labels próprios. As chamadas usam `PUSHA` e `CALL`, com frames baseadas em `FP`: parâmetros ficam em offsets negativos, o slot de retorno em `0`, e variáveis/temporários locais em offsets positivos. O suporte cobre `FUNCTION` e `SUBROUTINE` externos no subconjunto exercitado pelo projeto.
 
@@ -129,7 +129,7 @@ Em termos quantitativos, o estado de testes implementados pode ser resumido da s
 
 A principal dificuldade técnica foi lidar com especificidades históricas de Fortran 77, sobretudo no tratamento de colunas em fixed-form e no controlo de fluxo baseado em labels. A decisão de introduzir pré-processamento separado resolveu a primeira dificuldade de forma limpa. Já para a segunda, a estratégia de preservar labels na AST e traduzi-las explicitamente na IR permitiu manter rastreabilidade e correção estrutural no fluxo de execução.
 
-Outra dificuldade relevante foi equilibrar simplicidade com extensibilidade. As otimizações foram mantidas locais e fáceis de justificar, em vez de introduzir análises globais frágeis. No backend, a prioridade foi emitir apenas instruções existentes na EWVM documentada, evitando pseudo-operações inexistentes como `NEG` ou `NEQ`.
+Outra dificuldade relevante foi equilibrar simplicidade com extensibilidade. As otimizações foram mantidas locais e fáceis de justificar, em vez de introduzir análises globais frágeis. No backend, a prioridade foi emitir apenas instruções existentes na EWVM documentada, evitando pseudo-operações inexistentes como `NEG`, `NEQ` ou `POW`; quando necessário, como no caso de `**` inteiro, estas operações são expandidas para sequências de instruções EWVM existentes.
 
 ## 13. Execução e reprodução
 

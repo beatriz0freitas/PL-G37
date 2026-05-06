@@ -42,9 +42,7 @@ class StackEmitterMixin:
             return "CONCAT"
 
         if op == "**":
-            raise NotImplementedError(
-                "Operador '**' ainda não tem mapeamento suportado pela EWVM documentada"
-            )
+            return "MUL"
 
         arithmetic = {
             "+": ("ADD", "FADD"),
@@ -70,6 +68,41 @@ class StackEmitterMixin:
                 self.emit("SUB")
             return
         raise NotImplementedError(f"Operador unário sem tradução: {op}")
+
+    def _emit_integer_power(self, left: Any, right: Any, dest: Any) -> None:
+        base_name = "@POW_BASE"
+        exp_name = "@POW_EXP"
+        result_name = "@POW_RESULT"
+        test_label = self._new_backend_label("POW_TEST")
+        end_label = self._new_backend_label("POW_END")
+
+        self._push_value(left)
+        self._pop_to(base_name)
+        self._push_value(right)
+        self._pop_to(exp_name)
+        self.emit("PUSHI", 1)
+        self._pop_to(result_name)
+
+        self.emit_label(test_label)
+        self._push_symbol(exp_name)
+        self.emit("PUSHI", 0)
+        self.emit("SUP")
+        self.emit("JZ", self._label_name(end_label))
+
+        self._push_symbol(result_name)
+        self._push_symbol(base_name)
+        self.emit("MUL")
+        self._pop_to(result_name)
+
+        self._push_symbol(exp_name)
+        self.emit("PUSHI", 1)
+        self.emit("SUB")
+        self._pop_to(exp_name)
+        self.emit("JUMP", self._label_name(test_label))
+
+        self.emit_label(end_label)
+        self._push_symbol(result_name)
+        self._pop_to(dest)
 
     def _push_value_for_target(self, value: Any, target: Any) -> None:
         self._push_value_for_type(value, self._type_of(target))

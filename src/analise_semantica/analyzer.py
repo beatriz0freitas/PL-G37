@@ -431,7 +431,15 @@ class SemanticAnalyzer:
         node.right = right
         op = node.op.upper()
 
-        if op in {"+", "-", "*", "/", "**"}:
+        if op == "**":
+            if left_type != "INTEGER" or right_type != "INTEGER":
+                self._error(node.lineno, "Operador '**' suporta apenas base e expoente INTEGER")
+            if self._is_negative_int_literal(right):
+                self._error(node.lineno, "Operador '**' não suporta expoentes negativos")
+            self._annotate(node, "INTEGER")
+            return node, "INTEGER"
+
+        if op in {"+", "-", "*", "/"}:
             if left_type not in NUMERIC_TYPES or right_type not in NUMERIC_TYPES:
                 self._error(node.lineno, f"Operador '{node.op}' exige operandos numéricos")
             result_type = "REAL" if {left_type, right_type} & REAL_LIKE_TYPES else "INTEGER"
@@ -489,6 +497,13 @@ class SemanticAnalyzer:
             return "REAL" if set(arg_types) & REAL_LIKE_TYPES else "INTEGER"
 
         self._error(lineno, f"Intrínseca não suportada: {name}")
+
+    def _is_negative_int_literal(self, node: ast.Node) -> bool:
+        return (
+            isinstance(node, ast.UnaryOp)
+            and node.op == "-"
+            and isinstance(node.operand, ast.IntLit)
+        )
 
     def _check_callable_arity(self, symbol: Symbol, arity: int, lineno: int) -> None:
         if symbol.arity is not None and symbol.arity != arity:
