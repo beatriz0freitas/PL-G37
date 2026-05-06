@@ -127,10 +127,14 @@
 * `src/codegen/ewvm_generator.py`
 * `src/codegen/layout.py`
 * `src/codegen/decls.py`
+* `src/codegen/type_inference.py`
+* `src/codegen/stack_emitter.py`
+* `src/codegen/intrinsics_codegen.py`
 
 **Implementado:**
 
 * [X] Tradução de IR para EWVM
+* [X] Backend dividido entre orquestração, inferência de tipos, helpers de stack, intrínsecas, layout e metadados
 * [X] Integração CLI com `--stage codegen`
 * [X] Alocação global
 * [X] Operações aritméticas, relacionais e lógicas

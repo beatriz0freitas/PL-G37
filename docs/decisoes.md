@@ -53,9 +53,12 @@ src/
 │   └── operadores.py    # Tipos auxiliares (Temp, Label, LoopContext, ...)
 ├── codegen/
 │   ├── ewvm.py          # API pública do backend EWVM
-│   ├── ewvm_generator.py# Backend principal IR -> EWVM
+│   ├── ewvm_generator.py# Orquestração do backend IR -> EWVM
 │   ├── decls.py         # Extração de metadados semânticos
-│   └── layout.py        # Layout de memória global
+│   ├── layout.py        # Layout de memória global e frames
+│   ├── type_inference.py# Inferência de tipos temporários/valores IR
+│   ├── stack_emitter.py # Helpers de stack e mapeamento de operações
+│   └── intrinsics_codegen.py # Emissão de intrínsecas
 ├── errors.py            # CompileError, LexError, ParseError, SourceLocation
 ├── analise_semantica/
 │   ├── analyzer.py      # Análise semântica
@@ -545,7 +548,7 @@ A análise semântica já percorre a AST e:
 6. regista assinaturas de `FUNCTION`/`SUBROUTINE` antes da análise dos corpos;
 7. analisa cada subprograma com escopo próprio e valida aridade das chamadas.
 
-### Implementado — Geração de Código EWVM (`src/codegen/ewvm_generator.py`)
+### Implementado — Geração de Código EWVM (`src/codegen/`)
 
 O backend já mapeia a IR para EWVM, incluindo:
 
@@ -557,6 +560,12 @@ O backend já mapeia a IR para EWVM, incluindo:
 - intrínsecas suportadas (`MOD`, `INT`, `REAL`, `FLOAT`, `ABS`, `SQRT`, `MAX`, `MIN`);
 - convenção explícita de chamada para subprogramas definidos pelo utilizador;
 - emissão de labels, `CALL` e `RETURN`.
+
+A implementação do backend está dividida por responsabilidade: `ewvm_generator.py`
+orquestra a tradução IR -> EWVM, `type_inference.py` infere tipos de temporários,
+`stack_emitter.py` concentra helpers de stack/opcodes, `intrinsics_codegen.py`
+emite intrínsecas, `layout.py` modela memória/frames e `decls.py` extrai
+metadados semânticos.
 
 ### Implementado — Optimizações (`src/optimizer.py`)
 
