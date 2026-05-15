@@ -11,6 +11,7 @@ class Temp:
     id: int
 
     def __str__(self) -> str:
+        """Renderiza temporário como tN."""
         return f"t{self.id}"
 
 
@@ -21,6 +22,7 @@ class Label:
     name: str
 
     def __str__(self) -> str:
+        """Renderiza o nome textual da label."""
         return self.name
 
 
@@ -32,6 +34,7 @@ class IRArrayRef:
     indices: list[Any]
 
     def __str__(self) -> str:
+        """Renderiza referência de array como A[i, j]."""
         inner = ", ".join(str(i) for i in self.indices)
         return f"{self.name}[{inner}]"
 
@@ -43,6 +46,7 @@ class IRStringLit:
     value: str
 
     def __str__(self) -> str:
+        """Renderiza literal CHARACTER escapando caracteres especiais."""
         escaped = self.value.replace("\\", "\\\\").replace('"', '\\"')
         return f'"{escaped}"'
 

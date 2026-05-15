@@ -1,0 +1,17 @@
+digraph pipeline {
+  rankdir=LR;
+  graph [fontname="Inter", bgcolor="white"];
+  node [shape=box, style="rounded", fontname="Inter", fontsize=11];
+  edge [fontname="Inter", fontsize=10];
+
+  src [label="Fonte Fortran (.f)"];
+  pre [label="Pré-processamento\nnormalização de linhas"];
+  lex [label="Análise Léxica\ntokens PLY"];
+  par [label="Análise Sintática\nAST"];
+  sem [label="Análise Semântica\nAST anotada"];
+  ir [label="Geração de IR\nthree-address code"];
+  opt [label="Otimização\npasses sobre IR"];
+  cg [label="Codegen EWVM\ncódigo alvo"];
+
+  src -> pre -> lex -> par -> sem -> ir -> opt -> cg;
+}

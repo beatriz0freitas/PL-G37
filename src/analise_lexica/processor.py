@@ -18,11 +18,13 @@ class LogicalLine:
     __slots__ = ("code", "lineno", "label")
 
     def __init__(self, code: str, lineno: int, label: int | None):
+        """Guarda código normalizado, linha original e label opcional."""
         self.code   = code    # texto do código (pronto para o lexer PLY)
         self.lineno = lineno  # nº da 1ª linha física desta linha lógica
         self.label  = label   # int se houver label numérico, None caso contrário
 
     def __repr__(self):
+        """Representação de depuração usada em testes e inspeção manual."""
         return f"LogicalLine(lineno={self.lineno}, label={self.label!r}, code={self.code!r})"
 
 

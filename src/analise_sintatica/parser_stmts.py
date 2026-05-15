@@ -33,48 +33,18 @@ class StmtRules:
         p[0] = p[1]
 
     # Instruções sem label
-    def p_unlabeled_assign(self, p):
-        """unlabeled_stmt : assign_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_if(self, p):
-        """unlabeled_stmt : if_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_do(self, p):
-        """unlabeled_stmt : do_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_goto(self, p):
-        """unlabeled_stmt : goto_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_continue(self, p):
-        """unlabeled_stmt : continue_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_print(self, p):
-        """unlabeled_stmt : print_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_read(self, p):
-        """unlabeled_stmt : read_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_write(self, p):
-        """unlabeled_stmt : write_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_stop(self, p):
-        """unlabeled_stmt : stop_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_return(self, p):
-        """unlabeled_stmt : return_stmt"""
-        p[0] = p[1]
-
-    def p_unlabeled_call(self, p):
-        """unlabeled_stmt : call_stmt"""
+    def p_unlabeled_stmt(self, p):
+        """unlabeled_stmt : assign_stmt
+                          | if_stmt
+                          | do_stmt
+                          | goto_stmt
+                          | continue_stmt
+                          | print_stmt
+                          | read_stmt
+                          | write_stmt
+                          | stop_stmt
+                          | return_stmt
+                          | call_stmt"""
         p[0] = p[1]
 
     # Atribuição:  var = expr   ou   arr(i) = expr

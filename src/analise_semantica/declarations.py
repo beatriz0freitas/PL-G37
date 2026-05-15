@@ -12,6 +12,8 @@ from .symbols import SymbolTable
 
 @dataclass
 class _ScopeState:
+    """Snapshot do estado semântico para alternar entre escopos."""
+
     symbols: SymbolTable
     initialized: set[str]
     labels: dict[int, ast.Node]
@@ -24,6 +26,7 @@ class DeclarationAnalyzerMixin:
     """Responsável por escopos, símbolos declarados e normalização de decls."""
 
     def _declare_subprogram_signatures(self, program: ast.Program) -> None:
+        """Regista assinaturas de funções/subrotinas antes de analisar corpos."""
         for subprogram in program.subprograms:
             if isinstance(subprogram, ast.FunctionDef):
                 self.callables.declare_function(
@@ -47,6 +50,7 @@ class DeclarationAnalyzerMixin:
             raise TypeError(f"Subprograma nao suportado: {type(subprogram).__name__}")
 
     def _capture_scope(self) -> _ScopeState:
+        """Guarda o estado semântico atual para poder entrar num subprograma."""
         return _ScopeState(
             symbols=self.symbols,
             initialized=self.initialized,
@@ -57,6 +61,7 @@ class DeclarationAnalyzerMixin:
         )
 
     def _restore_scope(self, state: _ScopeState) -> None:
+        """Restaura um estado semântico previamente capturado."""
         self.symbols = state.symbols
         self.initialized = state.initialized
         self.labels = state.labels
@@ -65,6 +70,7 @@ class DeclarationAnalyzerMixin:
         self.implicit_typing = state.implicit_typing
 
     def _reset_scope(self, decls: list[ast.Node], current_function: ast.FunctionDef | None = None) -> None:
+        """Cria um escopo semântico limpo para programa principal ou subprograma."""
         self.symbols = SymbolTable()
         self.initialized = set()
         self.labels = {}
@@ -73,6 +79,7 @@ class DeclarationAnalyzerMixin:
         self.implicit_typing = config.implicit_typing
 
     def _analyze_subprogram(self, subprogram: ast.FunctionDef | ast.SubroutineDef) -> ast.Node:
+        """Analisa um FUNCTION/SUBROUTINE com tabela de símbolos própria."""
         previous = self._capture_scope()
         current_function = subprogram if isinstance(subprogram, ast.FunctionDef) else None
         self._reset_scope(subprogram.decls, current_function=current_function)
@@ -101,6 +108,7 @@ class DeclarationAnalyzerMixin:
         return subprogram
 
     def _scan_implicit_none(self, decls: list[ast.Node]) -> bool:
+        """Deteta se o conjunto de declarações contém IMPLICIT NONE."""
         return any(isinstance(decl, ast.ImplicitNone) for decl in decls)
 
     def _declare_symbols(
@@ -110,6 +118,7 @@ class DeclarationAnalyzerMixin:
         *,
         allow_function_typing: bool = False,
     ) -> None:
+        """Regista declarações escalares/arrays numa tabela de símbolos."""
         for decl in decls:
             if isinstance(decl, ast.ImplicitNone):
                 continue
@@ -133,6 +142,7 @@ class DeclarationAnalyzerMixin:
                 raise TypeError(f"Declaração não suportada: {type(var).__name__}")
 
     def _declare_parameters(self, subprogram: ast.FunctionDef | ast.SubroutineDef) -> None:
+        """Valida parâmetros formais e marca-os como inicializados."""
         for param in subprogram.params:
             symbol = self.symbols.lookup(param)
             if symbol is None:
@@ -146,6 +156,7 @@ class DeclarationAnalyzerMixin:
             self._mark_initialized(param)
 
     def _collect_labels(self, stmts: list[ast.Node]) -> None:
+        """Recolhe labels de instruções para validar GOTOs e DOs."""
         for stmt in stmts:
             label = getattr(stmt, "source_label", None)
             if label is not None:
@@ -157,6 +168,7 @@ class DeclarationAnalyzerMixin:
                 self._collect_labels(stmt.else_stmts)
 
     def _visit_decl(self, decl: ast.Node) -> ast.Node:
+        """Normaliza uma declaração depois de os símbolos já estarem registados."""
         if isinstance(decl, ast.ImplicitNone):
             return decl
         if not isinstance(decl, ast.TypeDecl):

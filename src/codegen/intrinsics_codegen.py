@@ -9,6 +9,7 @@ class IntrinsicsCodegenMixin:
     """Responsável por traduzir intrínsecas Fortran para EWVM."""
 
     def _translate_intrinsic_call(self, name: str, args: list[Any]) -> None:
+        """Despacha uma intrínseca suportada para o emissor específico."""
         if name == "ABS":
             self._emit_abs(args[0])
             return
@@ -24,6 +25,7 @@ class IntrinsicsCodegenMixin:
         raise NotImplementedError(f"Intrínseca sem tradução: {name}")
 
     def _emit_abs(self, arg: Any) -> None:
+        """Emite ABS para inteiros ou reais usando comparação e negação."""
         is_real = self._is_real_type(self._type_of(arg))
         keep_label = self._new_backend_label("ABS_KEEP")
         end_label = self._new_backend_label("ABS_END")
@@ -44,6 +46,7 @@ class IntrinsicsCodegenMixin:
         self.emit_label(end_label)
 
     def _emit_max_min(self, left: Any, right: Any, *, want_max: bool) -> None:
+        """Emite MAX/MIN escolhendo entre dois valores em runtime."""
         is_real = self._is_real_type(self._type_of(left)) or self._is_real_type(self._type_of(right))
         take_left_label = self._new_backend_label("MM_LEFT")
         end_label = self._new_backend_label("MM_END")
@@ -64,6 +67,7 @@ class IntrinsicsCodegenMixin:
         self.emit_label(end_label)
 
     def _emit_sqrt(self, arg: Any) -> None:
+        """Emite SQRT por iterações de Newton com auxiliares globais."""
         arg_name = "@SQRT_ARG"
         guess_name = "@SQRT_GUESS"
         iter_name = "@SQRT_ITER"

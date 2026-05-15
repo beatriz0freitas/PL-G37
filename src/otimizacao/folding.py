@@ -49,6 +49,7 @@ def _eval_binop(op: str, left: Any, right: Any) -> Any:
 
 
 def _eval_unary(op: str, operand: Any) -> Any:
+    """Avalia um operador unário sobre literal em tempo de compilação."""
     match op:
         case "NEG":
             return -operand

@@ -153,17 +153,20 @@ class Fortran77Lexer:
         t.lexer.lineno += len(t.value)
  
     def t_error(self, t):
+        """Reporta caracteres que nenhuma regra léxica reconheceu."""
         raise LexError(
             f"Carácter ilegal {t.value[0]!r}",
             SourceLocation(self._filename, self._current_lineno, t.lexpos + 1),
         )
  
     def __init__(self):
+        """Inicializa metadados usados em mensagens de erro e instância PLY."""
         self._filename       = "<stdin>"
         self._current_lineno = 1
         self.lexer           = None
  
     def build(self, **kwargs):
+        """Constrói o lexer PLY e devolve a própria instância."""
         self.lexer = lex.lex(module=self, reflags=re.IGNORECASE, **kwargs)
         return self
  

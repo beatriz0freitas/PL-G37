@@ -42,6 +42,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         array_types: ArrayTypes | None = None,
         subprograms: dict[str, SubprogramInfo] | None = None,
     ):
+        """Recebe metadados semânticos e prepara estado interno do backend."""
         self.scalar_types = dict(scalar_types or {})
         self.array_types = dict(array_types or {})
         self.subprograms = dict(subprograms or {})
@@ -56,6 +57,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
 
     @classmethod
     def from_program(cls, program: ast.Program) -> "EWVMGenerator":
+        """Constrói o backend a partir de uma AST semanticamente anotada."""
         info = extract_program_decl_info(program)
         return cls(
             scalar_types=info.scalar_types,
@@ -64,6 +66,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         )
 
     def generate(self, instructions: list[IRInstr]) -> str:
+        """Traduz uma lista de IR para texto EWVM completo."""
         self.lines = []
         self.layout = MemoryLayout()
         self.temp_types = {}
@@ -93,27 +96,33 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         return "\n".join(self.lines)
 
     def emit(self, *tokens: Any) -> None:
+        """Acrescenta uma instrução EWVM já serializada por tokens."""
         self.lines.append(" ".join(str(token) for token in tokens))
 
     def emit_label(self, label: Any) -> None:
+        """Emite uma label EWVM normalizada."""
         self.lines.append(f"{self._label_name(label)}:")
 
     def _new_backend_label(self, prefix: str) -> str:
+        """Cria uma label interna única para sequências auxiliares do backend."""
         self._backend_label_count += 1
         return f"{prefix}_{self._backend_label_count}"
 
     def _label_name(self, label: Any) -> str:
+        """Remove caracteres inválidos de labels antes de emitir EWVM."""
         raw = str(label)
         sanitized = "".join(ch for ch in raw if ch.isalnum())
         return sanitized or raw
 
     def _allocate_declared_symbols(self) -> None:
+        """Reserva slots globais para escalares e ponteiros de arrays declarados."""
         for name in sorted(self.scalar_types):
             self.layout.allocate_scalar(name)
         for name in sorted(self.array_types):
             self.layout.allocate_scalar(name)
 
     def _build_frame_layouts(self) -> None:
+        """Calcula offsets relativos ao FP para cada subprograma."""
         self.frame_layouts = {}
         for info in self.subprograms.values():
             param_offsets = {
@@ -145,6 +154,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             )
 
     def _reserve_intrinsic_helpers(self, instructions: list[IRInstr]) -> None:
+        """Reserva variáveis auxiliares necessárias para intrínsecas complexas."""
         needs_sqrt = any(
             isinstance(instr, IRCall) and instr.name.upper() == "SQRT"
             for instr in instructions
@@ -165,11 +175,13 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self._reserve_helper_scalar("@POW_RESULT", "INTEGER")
 
     def _reserve_helper_scalar(self, name: str, typename: str) -> None:
+        """Regista um escalar interno usado pelo backend."""
         self._helper_scalars[name] = typename
         self.scalar_types.setdefault(name, typename)
         self.layout.allocate_scalar(name)
 
     def _emit_array_allocations(self) -> None:
+        """Emite ALLOC para arrays globais e guarda os ponteiros."""
         for name in sorted(self.array_types):
             _, dims = self.array_types[name]
             total = 1
@@ -179,10 +191,12 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self.emit("STOREG", self.layout.addr_of_scalar(name))
 
     def _emit_global_initialization(self) -> None:
+        """Inicializa a zona global da EWVM com zeros."""
         for _ in range(self.layout.total_cells):
             self.emit("PUSHI", 0)
 
     def _allocate_temporaries_and_implicit_scalars(self, instructions: list[IRInstr]) -> None:
+        """Percorre a IR para reservar armazenamento a temporários e nomes implícitos."""
         for instr in instructions:
             if isinstance(instr, IRProcBegin):
                 self._set_current_subprogram(instr.name)
@@ -232,6 +246,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         self._set_current_subprogram(None)
 
     def _scan_value(self, value: Any) -> None:
+        """Inspeciona um valor IR e reserva armazenamento se necessário."""
         if isinstance(value, Temp):
             self._ensure_storage(value)
         elif isinstance(value, IRArrayRef):
@@ -242,6 +257,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
                 self._ensure_storage(value)
 
     def _ensure_storage(self, target: Any) -> None:
+        """Garante que um destino IR tem slot global ou local."""
         if isinstance(target, Temp):
             self._ensure_named_storage(str(target))
             return
@@ -249,6 +265,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self._ensure_named_storage(target)
 
     def _ensure_named_storage(self, name: str) -> None:
+        """Reserva um nome concreto no escopo ativo."""
         if self._current_frame is not None:
             if name in self._current_frame.param_offsets or name in self._current_frame.local_offsets:
                 return
@@ -261,6 +278,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         self.scalar_types.setdefault(name, self.temp_types.get(name, "INTEGER"))
 
     def _is_declared_name(self, name: str) -> bool:
+        """Indica se um nome já existe nos metadados globais ou de subprogramas."""
         if name in self.scalar_types or name in self.array_types:
             return True
         for info in self.subprograms.values():
@@ -269,6 +287,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         return False
 
     def _set_current_subprogram(self, name: str | None) -> None:
+        """Ativa ou limpa o contexto de subprograma durante tradução/alocação."""
         if name is None:
             self._current_subprogram = None
             self._current_frame = None
@@ -277,6 +296,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         self._current_frame = self.frame_layouts[name]
 
     def _translate(self, instr: IRInstr) -> None:
+        """Despacha uma instrução IR para a sequência EWVM correspondente."""
         match instr:
             case IRLabelInstr(label=label):
                 self.emit_label(label)
@@ -344,6 +364,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
                 raise NotImplementedError(f"Instrução IR sem tradução: {type(instr).__name__}")
 
     def _translate_print(self, args: list[Any]) -> None:
+        """Traduz PRINT/WRITE textual para instruções WRITE* da EWVM."""
         for arg in args:
             self._push_value(arg)
             typename = self._type_of(arg)
@@ -356,6 +377,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
         self.emit("WRITELN")
 
     def _translate_read(self, args: list[Any]) -> None:
+        """Traduz READ para leitura, conversão e armazenamento no alvo."""
         for target in args:
             typename = self._type_of(target)
             if isinstance(target, IRArrayRef):
@@ -376,6 +398,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self._pop_to(target)
 
     def _translate_call(self, name: str, args: list[Any], dest: Any | None) -> None:
+        """Traduz intrínsecas e chamadas a subprogramas definidos pelo utilizador."""
         upper = name.upper()
 
         if upper == "MOD":
@@ -414,6 +437,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self.emit("POP", len(args) + 1)
 
     def _translate_proc_begin(self, name: str) -> None:
+        """Emite prólogo de função/subrotina e aloca arrays locais."""
         info = self.subprograms.get(name)
         if info is None:
             raise NotImplementedError(f"Subprograma sem metadados: {name}")
@@ -433,6 +457,7 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self.emit("STOREL", offset)
 
     def _translate_return(self) -> None:
+        """Emite epílogo de retorno, incluindo resultado de função e FREE locais."""
         info = self._current_subprogram
         frame = self._current_frame
         if info is None or frame is None:
@@ -446,11 +471,13 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             self.emit("FREE")
 
     def _active_scalar_types(self) -> ScalarTypes:
+        """Devolve os tipos escalares do escopo atualmente ativo."""
         if self._current_subprogram is not None:
             return self._current_subprogram.scalar_types
         return self.scalar_types
 
     def _active_array_types(self) -> ArrayTypes:
+        """Devolve os tipos de arrays do escopo atualmente ativo."""
         if self._current_subprogram is not None:
             return self._current_subprogram.array_types
         return self.array_types

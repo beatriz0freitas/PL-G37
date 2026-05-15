@@ -14,9 +14,11 @@ def common_subexpression_elimination(instructions: list[IRInstr]) -> list[IRInst
     """Elimina subexpressões comuns simples dentro de cada bloco."""
 
     def is_cse_value(value: Any) -> bool:
+        """Filtra valores seguros para indexar numa chave de CSE."""
         return is_literal(value) or isinstance(value, Temp)
 
     def norm_value(value: Any) -> Any:
+        """Normaliza literais e temporários para comparação estrutural."""
         if isinstance(value, Temp):
             return ("t", str(value))
         if is_literal(value):
@@ -24,6 +26,7 @@ def common_subexpression_elimination(instructions: list[IRInstr]) -> list[IRInst
         return ("o", value)
 
     def key_for_binop(op: str, left: Any, right: Any) -> tuple | None:
+        """Constrói a chave canónica de uma operação binária, se segura."""
         if not is_cse_value(left) or not is_cse_value(right):
             return None
         commutative = {"+", "*", "==", "!=", "AND", "OR", "EQV", "NEQV"}
@@ -34,11 +37,13 @@ def common_subexpression_elimination(instructions: list[IRInstr]) -> list[IRInst
         return ("bin", op, left_key, right_key)
 
     def key_for_unary(op: str, operand: Any) -> tuple | None:
+        """Constrói a chave canónica de uma operação unária, se segura."""
         if not is_cse_value(operand):
             return None
         return ("un", op, norm_value(operand))
 
     def invalidate_for_temp(temp_name: str) -> None:
+        """Remove expressões dependentes de um temporário redefinido."""
         to_remove = [key for key in expr_map if temp_name in key_deps[key]]
         for key in to_remove:
             expr_map.pop(key, None)

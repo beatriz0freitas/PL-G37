@@ -21,20 +21,20 @@ rectangle "<b>Análise Léxica</b>\n\nTokens válidos" as LEX
 
 rectangle "<b>Análise Sintática</b>\n\nAST estruturada" as PAR
 
-rectangle "<b>Geração de IR</b>\n\nTAC intermédio" as IR
-
 rectangle "<b>Análise Semântica</b>\n\nRegras contextuais" as SEM
 
-rectangle "<b>Codegen EWVM</b>\n\nCódigo alvo" as CG
+rectangle "<b>Geração de IR</b>\n\nTAC intermédio" as IR
 
 rectangle "<b>Otimização</b>\n\nMelhoria desempenho" as OPT
+
+rectangle "<b>Codegen EWVM</b>\n\nCódigo alvo" as CG
 
 SRC --> PRE
 PRE --> LEX
 LEX --> PAR
-PAR --> IR
-IR --> SEM
-SEM --> CG
-CG --> OPT
+PAR --> SEM
+SEM --> IR
+IR --> OPT
+OPT --> CG
 
 @enduml

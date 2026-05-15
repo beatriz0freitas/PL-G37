@@ -35,14 +35,17 @@ def is_literal(value: Any) -> bool:
 
 
 def temp_key(value: Any) -> str | None:
+    """Converte um temporário em chave de ambiente, ignorando outros valores."""
     return str(value) if isinstance(value, Temp) else None
 
 
 def is_copy_source(value: Any) -> bool:
+    """Indica se um valor pode ser propagado como cópia direta."""
     return isinstance(value, (Temp, str))
 
 
 def is_false_literal(value: Any) -> bool:
+    """Reconhece literais que tornam uma condição falsa na IR."""
     if isinstance(value, bool):
         return not value
     if isinstance(value, (int, float)):
@@ -51,6 +54,7 @@ def is_false_literal(value: Any) -> bool:
 
 
 def is_true_literal(value: Any) -> bool:
+    """Reconhece literais que tornam uma condição verdadeira na IR."""
     if isinstance(value, bool):
         return value
     if isinstance(value, (int, float)):
@@ -59,6 +63,7 @@ def is_true_literal(value: Any) -> bool:
 
 
 def used_temps_in_value(value: Any) -> set[str]:
+    """Extrai temporários usados dentro de um valor IR."""
     if isinstance(value, Temp):
         return {str(value)}
     if isinstance(value, IRArrayRef):
@@ -70,6 +75,7 @@ def used_temps_in_value(value: Any) -> set[str]:
 
 
 def used_temps_in_instr(instr: IRInstr) -> set[str]:
+    """Extrai temporários lidos por uma instrução IR."""
     used: set[str] = set()
     if isinstance(instr, IRAssign):
         used |= used_temps_in_value(instr.src)
@@ -107,6 +113,7 @@ def used_temps_in_instr(instr: IRInstr) -> set[str]:
 
 
 def defined_temp(instr: IRInstr) -> str | None:
+    """Devolve o temporário definido por uma instrução, se existir."""
     if isinstance(instr, IRAssign) and isinstance(instr.dest, Temp):
         return str(instr.dest)
     if isinstance(instr, IROp) and isinstance(instr.dest, Temp):
@@ -119,6 +126,7 @@ def defined_temp(instr: IRInstr) -> str | None:
 
 
 def split_basic_blocks(instructions: list[IRInstr]) -> list[list[IRInstr]]:
+    """Divide IR em blocos lineares separados por labels/fronteiras de escopo."""
     blocks: list[list[IRInstr]] = []
     current: list[IRInstr] = []
     for instr in instructions:

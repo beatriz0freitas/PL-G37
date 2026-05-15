@@ -11,9 +11,11 @@ class StatementAnalyzerMixin:
     """Percorre e valida a lista de instruções da AST."""
 
     def _visit_stmt_list(self, stmts: list[ast.Node]) -> list[ast.Node]:
+        """Valida uma sequência de instruções preservando a ordem original."""
         return [self._visit_stmt(stmt) for stmt in stmts]
 
     def _visit_stmt(self, stmt: ast.Node) -> ast.Node:
+        """Encaminha uma instrução AST para o validador especializado."""
         if isinstance(stmt, ast.AssignStmt):
             return self._visit_assign(stmt)
         if isinstance(stmt, ast.IfStmt):
@@ -41,6 +43,7 @@ class StatementAnalyzerMixin:
         raise NotImplementedError(f"Análise semântica não implementada para {type(stmt).__name__}")
 
     def _visit_assign(self, stmt: ast.AssignStmt) -> ast.AssignStmt:
+        """Valida uma atribuição e marca o alvo como inicializado."""
         target, target_type = self._rewrite_lvalue(stmt.target)
         value, value_type = self._rewrite_expr(stmt.value)
         self._ensure_assignable(target_type, value_type, stmt.lineno)
@@ -50,6 +53,7 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_if(self, stmt: ast.IfStmt) -> ast.IfStmt:
+        """Valida IF lógico e combina inicializações dos ramos."""
         condition, cond_type = self._rewrite_expr(stmt.condition)
         self._ensure_type(cond_type, "LOGICAL", stmt.lineno)
         stmt.condition = condition
@@ -67,6 +71,7 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_arith_if(self, stmt: ast.ArithIfStmt) -> ast.ArithIfStmt:
+        """Valida o IF aritmético e os três labels de destino."""
         expr, expr_type = self._rewrite_expr(stmt.expr)
         if expr_type not in NUMERIC_TYPES:
             self._error(stmt.lineno, f"IF aritmético exige expressão numérica, recebeu {expr_type}")
@@ -77,6 +82,7 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_do(self, stmt: ast.DoStmt) -> ast.DoStmt:
+        """Valida limites, variável de controlo e label terminal do DO."""
         symbol = self._require_scalar(stmt.var, stmt.lineno)
         if symbol.kind != "scalar":
             self._error(stmt.lineno, f"Variável de controlo do DO tem de ser escalar: {stmt.var}")
@@ -100,14 +106,17 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_goto(self, stmt: ast.GotoStmt) -> ast.GotoStmt:
+        """Confirma que o GOTO aponta para uma label existente."""
         self._require_label(stmt.label, stmt.lineno)
         return stmt
 
     def _visit_print(self, stmt: ast.PrintStmt) -> ast.PrintStmt:
+        """Valida e reescreve expressões de saída PRINT."""
         stmt.items = [self._rewrite_expr(item)[0] for item in stmt.items]
         return stmt
 
     def _visit_read(self, stmt: ast.ReadStmt) -> ast.ReadStmt:
+        """Valida alvos de READ e marca-os como inicializados."""
         rewritten: list[ast.VarRef | ast.ArrayRef] = []
         for var in stmt.variables:
             lvalue, _ = self._rewrite_lvalue(var)
@@ -117,6 +126,7 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_write(self, stmt: ast.WriteStmt) -> ast.WriteStmt:
+        """Valida unidade/formato e expressões de saída WRITE."""
         if stmt.unit is not None:
             stmt.unit = self._rewrite_expr(stmt.unit)[0]
         if isinstance(stmt.fmt, ast.Node):
@@ -125,6 +135,7 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_call_stmt(self, stmt: ast.CallStmt) -> ast.CallStmt:
+        """Valida uma chamada de subrotina e os respetivos argumentos."""
         stmt.name = stmt.name.upper()
         symbol = self._require_callable(stmt.name, stmt.lineno)
         if symbol.kind != "subroutine":
@@ -136,4 +147,5 @@ class StatementAnalyzerMixin:
         return stmt
 
     def _visit_return(self, stmt: ast.ReturnStmt) -> ast.ReturnStmt:
+        """Aceita RETURN; validações de contexto podem ser acrescentadas aqui."""
         return stmt

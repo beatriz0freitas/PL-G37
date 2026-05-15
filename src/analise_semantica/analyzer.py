@@ -21,6 +21,7 @@ class SemanticAnalyzer(
     """Valida e anota a AST antes da geracao de IR."""
 
     def __init__(self):
+        """Inicializa o estado reutilizável da análise semântica."""
         self.filename = "<stdin>"
         self.symbols = SymbolTable()
         self.callables = SymbolTable()
@@ -31,6 +32,7 @@ class SemanticAnalyzer(
         self.implicit_typing = config.implicit_typing
 
     def analyze(self, program: ast.Program, filename: str = "<stdin>") -> ast.Program:
+        """Executa a análise semântica completa e devolve a AST anotada."""
         self.filename = filename
         self.callables = SymbolTable()
         self._declare_subprogram_signatures(program)

@@ -15,6 +15,7 @@ class ExpressionAnalyzerMixin:
     """Resolve identificadores, chamadas, arrays e tipos de expressões."""
 
     def _rewrite_lvalue(self, node: ast.Node) -> tuple[ast.VarRef | ast.ArrayRef, str]:
+        """Valida um alvo de atribuição/READ e devolve o nó reescrito com tipo."""
         if isinstance(node, ast.VarRef):
             symbol = self._require_scalar(node.name, node.lineno)
             node.name = symbol.name
@@ -35,6 +36,7 @@ class ExpressionAnalyzerMixin:
         self._error(getattr(node, "lineno", 0), f"Lvalue inválido: {type(node).__name__}")
 
     def _rewrite_expr(self, node: Any) -> tuple[Any, str]:
+        """Reescreve uma expressão, anota o tipo e devolve par (nó, tipo)."""
         if isinstance(node, ast.IntLit):
             self._annotate(node, "INTEGER")
             return node, "INTEGER"
@@ -60,6 +62,7 @@ class ExpressionAnalyzerMixin:
         return node, getattr(node, "sem_type")
 
     def _rewrite_var_expr(self, node: ast.VarRef) -> tuple[ast.VarRef, str]:
+        """Resolve uma referência escalar usada como expressão."""
         symbol = self._require_scalar(node.name, node.lineno)
         node.name = symbol.name
         if symbol.kind == "array":
@@ -72,6 +75,7 @@ class ExpressionAnalyzerMixin:
         return node, symbol.type_name
 
     def _rewrite_array_expr(self, node: ast.ArrayRef) -> tuple[ast.ArrayRef, str]:
+        """Resolve e valida um acesso a array usado como expressão."""
         symbol = self.symbols.require(node.name, node.lineno, filename=self.filename)
         node.name = symbol.name
         if symbol.kind != "array":
@@ -83,6 +87,7 @@ class ExpressionAnalyzerMixin:
         return node, symbol.type_name
 
     def _rewrite_call_expr(self, node: ast.CallExpr) -> tuple[ast.Node, str]:
+        """Resolve a ambiguidade ID(args) entre array, função e intrínseca."""
         name = node.name.upper()
         symbol = self.symbols.lookup(name)
 
@@ -122,6 +127,7 @@ class ExpressionAnalyzerMixin:
         return node, result_type
 
     def _rewrite_unary(self, node: ast.UnaryOp) -> tuple[ast.UnaryOp, str]:
+        """Valida operador unário e devolve o tipo do resultado."""
         operand, operand_type = self._rewrite_expr(node.operand)
         node.operand = operand
         op = node.op.upper()
@@ -137,6 +143,7 @@ class ExpressionAnalyzerMixin:
         self._error(node.lineno, f"Operador unário não suportado: {node.op}")
 
     def _rewrite_binop(self, node: ast.BinOp) -> tuple[ast.BinOp, str]:
+        """Valida operador binário e calcula o tipo semântico resultante."""
         left, left_type = self._rewrite_expr(node.left)
         right, right_type = self._rewrite_expr(node.right)
         node.left = left
@@ -179,6 +186,7 @@ class ExpressionAnalyzerMixin:
         self._error(node.lineno, f"Operador binário não suportado: {node.op}")
 
     def _rewrite_array_indices(self, node: ast.ArrayRef, symbol: Symbol) -> list[Any]:
+        """Valida quantidade/tipo dos índices e devolve-os reescritos."""
         if len(node.indices) != len(symbol.dimensions):
             self._error(
                 node.lineno,

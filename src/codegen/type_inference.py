@@ -22,6 +22,7 @@ class TypeInferenceMixin:
     """Responsável por inferir tipos de temporários e valores IR."""
 
     def _infer_temp_types(self, instructions: list[IRInstr]) -> None:
+        """Propaga tipos de temporários até atingir ponto fixo."""
         changed = True
         while changed:
             changed = False
@@ -42,6 +43,7 @@ class TypeInferenceMixin:
         self._set_current_subprogram(None)
 
     def _infer_instr_type(self, instr: IRInstr) -> tuple[str, str] | None:
+        """Infere o tipo definido por uma instrução IR, quando existe destino."""
         if isinstance(instr, IRAssign) and isinstance(instr.dest, Temp):
             return str(instr.dest), self._type_of(instr.src)
 
@@ -90,6 +92,7 @@ class TypeInferenceMixin:
         return None
 
     def _type_of(self, value: Any) -> str:
+        """Determina o tipo EWVM/Fortran associado a um valor IR."""
         if isinstance(value, bool):
             return "LOGICAL"
         if isinstance(value, int):
@@ -113,4 +116,5 @@ class TypeInferenceMixin:
 
     @staticmethod
     def _is_real_type(type_name: str) -> bool:
+        """Indica se um tipo deve usar a stack real da EWVM."""
         return type_name in REAL_LIKE_TYPES

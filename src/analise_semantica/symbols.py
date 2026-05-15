@@ -22,6 +22,7 @@ class Symbol:
     lineno: int = 0
 
     def __post_init__(self) -> None:
+        """Normaliza campos textuais e valida a categoria do símbolo."""
         self.name = self.name.upper()
         self.kind = self.kind.lower()
         self.type_name = self.type_name.upper()
@@ -34,6 +35,7 @@ class SymbolTable:
     """Tabela simples de simbolos ao nivel do programa."""
 
     def __init__(self):
+        """Cria uma tabela vazia indexada por identificador normalizado."""
         self._table: dict[str, Symbol] = {}
 
     def declare(self, symbol: Symbol, filename: str = "<stdin>") -> Symbol:
@@ -49,6 +51,7 @@ class SymbolTable:
         return symbol
 
     def declare_scalar(self, name: str, type_name: str, lineno: int, filename: str = "<stdin>") -> Symbol:
+        """Declara uma variável escalar."""
         return self.declare(
             Symbol(name=name, kind="scalar", type_name=type_name, lineno=lineno),
             filename=filename,
@@ -62,6 +65,7 @@ class SymbolTable:
         lineno: int,
         filename: str = "<stdin>",
     ) -> Symbol:
+        """Declara um array com dimensões já validadas."""
         return self.declare(
             Symbol(
                 name=name,
@@ -81,6 +85,7 @@ class SymbolTable:
         lineno: int,
         filename: str = "<stdin>",
     ) -> Symbol:
+        """Declara a assinatura de uma função externa."""
         return self.declare(
             Symbol(
                 name=name,
@@ -99,6 +104,7 @@ class SymbolTable:
         lineno: int,
         filename: str = "<stdin>",
     ) -> Symbol:
+        """Declara a assinatura de uma subrotina externa."""
         return self.declare(
             Symbol(
                 name=name,
@@ -111,9 +117,11 @@ class SymbolTable:
         )
 
     def lookup(self, name: str) -> Symbol | None:
+        """Procura um identificador sem produzir erro se estiver ausente."""
         return self._table.get(name.upper())
 
     def require(self, name: str, lineno: int, filename: str = "<stdin>") -> Symbol:
+        """Procura um identificador e falha se ele não tiver sido declarado."""
         symbol = self.lookup(name)
         if symbol is None:
             raise SemanticError(
@@ -123,10 +131,13 @@ class SymbolTable:
         return symbol
 
     def values(self):
+        """Itera os símbolos registados."""
         return self._table.values()
 
     def items(self):
+        """Itera pares (nome, símbolo) registados."""
         return self._table.items()
 
     def __len__(self) -> int:
+        """Devolve o número de símbolos registados."""
         return len(self._table)

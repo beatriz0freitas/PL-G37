@@ -33,6 +33,7 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
     start = "program"
 
     def __init__(self, lexer: Fortran77Lexer):
+        """Liga o parser ao lexer e prepara estado de erro por ficheiro."""
         self.lexer = lexer
         self.tokens = lexer.tokens          # PLY exige este atributo
         self._filename = "<stdin>"
@@ -86,6 +87,7 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
 
     # Tratamento de erros
     def p_error(self, p):
+        """Converte erros PLY em ParseError com localização de fonte."""
         if p:
             column = getattr(p, "lexpos", -1)
             column = column + 1 if column >= 0 else 0
@@ -124,11 +126,13 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
             """Adapta uma lista de LexToken para a interface que o PLY yacc espera."""
 
             def __init__(self, it):
+                """Recebe o iterador de tokens já produzido pelo lexer."""
                 self._it = it
                 self.lineno = 1
                 self.lexpos = 0
 
             def token(self):
+                """Devolve o próximo token no formato esperado pelo PLY yacc."""
                 try:
                     tok = next(self._it)
                     self.lineno = tok.lineno
@@ -138,6 +142,7 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
                     return None
 
             def input(self, _):
+                """Satisfaz a interface de lexer do PLY; os tokens já existem."""
                 pass
 
         adapter = TokenAdapter(token_iter)

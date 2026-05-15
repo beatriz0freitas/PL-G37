@@ -27,6 +27,7 @@ class Config:
     input_file: str = ""
 
     def validate(self):
+        """Valida valores de configuração antes de iniciar o pipeline."""
         if self.source_format not in ("fixed", "free", "auto"):
             raise ValueError(f"source_format inválido: {self.source_format!r}")
 

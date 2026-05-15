@@ -18,6 +18,7 @@ from src.errors import CompileError, ParseError
 
 
 def parse_args():
+    """Lê argumentos da linha de comando e devolve o namespace argparse."""
     p = argparse.ArgumentParser(prog="fortran77c",
                                 description="Compilador Fortran 77 → EWVM")
     p.add_argument("input", metavar="FICHEIRO")
@@ -40,6 +41,7 @@ def detect_source_format(source: str) -> str:
     """
 
     def _strip_comments_and_strings(line: str) -> str:
+        """Remove zonas irrelevantes para a heurística de formato."""
         in_str = False
         cleaned: list[str] = []
         i = 0
@@ -102,10 +104,12 @@ def detect_source_format(source: str) -> str:
 
 
 def resolve_source_format(source: str, requested: str) -> str:
+    """Resolve 'auto' para fixed/free ou respeita o formato pedido."""
     return detect_source_format(source) if requested == "auto" else requested
 
 
 def _alternate_format(source_format: str) -> str:
+    """Devolve o formato alternativo usado para sugerir correções."""
     return "free" if source_format == "fixed" else "fixed"
 
 
@@ -116,6 +120,7 @@ def _raise_with_format_hint(
     source_format: str,
     err: ParseError,
 ) -> None:
+    """Tenta parsear no formato alternativo para produzir uma dica útil."""
     alternate = _alternate_format(source_format)
     try:
         parser.parse(source, filename=filename, source_format=alternate)
@@ -129,6 +134,7 @@ def _raise_with_format_hint(
 
 
 def _build_pipeline(debug: bool = False):
+    """Constrói lexer e parser PLY prontos para executar um estágio."""
     from src.analise_lexica.lexer import Fortran77Lexer
     from src.analise_sintatica.parser import Fortran77Parser
 
@@ -138,6 +144,7 @@ def _build_pipeline(debug: bool = False):
 
 
 def run_lex(source: str, filename: str, source_format: str, debug: bool):
+    """Executa apenas a análise léxica e imprime os tokens."""
     from src.analise_lexica.lexer import Fortran77Lexer
     lexer = Fortran77Lexer().build(debug=debug)
     tokens = lexer.tokenize(source, filename=filename, source_format=source_format)
@@ -154,6 +161,7 @@ def run_parse(
     parser=None,
     emit_output: bool = True,
 ):
+    """Executa lexer+parser e devolve a AST."""
     if parser is None:
         _, parser = _build_pipeline(debug=debug)
 
@@ -171,6 +179,7 @@ def run_parse(
 
 
 def run_semantic(tree, filename: str, emit_output: bool = True):
+    """Executa a análise semântica sobre uma AST já construída."""
     from src.analise_semantica import analyze
 
     analyzed = analyze(tree, filename=filename)
@@ -190,6 +199,7 @@ def _run_ir_generator(tree):
 
 
 def run_ir(source: str, filename: str, source_format: str, debug: bool):
+    """Executa o pipeline até à IR não otimizada e imprime o resultado."""
     _, parser = _build_pipeline(debug=debug)
     tree = run_parse(source, filename, source_format, debug=False,
                      parser=parser, emit_output=False)
@@ -229,6 +239,7 @@ def run_opt(source: str, filename: str, source_format: str, debug: bool):
 
 
 def run_codegen(source: str, filename: str, source_format: str, debug: bool):
+    """Executa o pipeline completo e imprime código EWVM."""
     _, parser = _build_pipeline(debug=debug)
     tree = run_parse(source, filename, source_format, debug=False,
                      parser=parser, emit_output=False)
@@ -253,6 +264,7 @@ def run_codegen(source: str, filename: str, source_format: str, debug: bool):
 
 
 def main():
+    """Ponto de entrada da CLI; escolhe e executa o estágio pedido."""
     args = parse_args()
 
     config.source_format = args.source_format

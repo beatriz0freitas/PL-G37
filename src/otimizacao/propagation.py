@@ -28,10 +28,12 @@ def constant_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
     """Propaga literais atribuídos a temporários para os seus usos seguintes."""
 
     def subst(value: Any) -> Any:
+        """Substitui temporário pelo literal conhecido, quando existir."""
         key = temp_key(value)
         return env.get(key, value) if key is not None else value
 
     def define(dest: Any, value: Any) -> None:
+        """Atualiza o ambiente de constantes para uma definição."""
         key = temp_key(dest)
         if key is None:
             return
@@ -41,6 +43,7 @@ def constant_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
             env.pop(key, None)
 
     def kill(dest: Any) -> None:
+        """Remove informação conhecida de um destino redefinido."""
         key = temp_key(dest)
         if key:
             env.pop(key, None)
@@ -80,6 +83,7 @@ def copy_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
     """Propaga temporários que são cópias diretas."""
 
     def resolve(value: Any) -> Any:
+        """Segue cadeias de cópias para obter o valor mais direto."""
         if not isinstance(value, Temp):
             return value
         key = str(value)
@@ -97,6 +101,7 @@ def copy_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
         return value
 
     def define(dest: Any, src: Any) -> None:
+        """Regista uma cópia direta ou invalida a cópia anterior."""
         key = temp_key(dest)
         if key is None:
             return
@@ -106,6 +111,7 @@ def copy_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
             env.pop(key, None)
 
     def kill(dest: Any) -> None:
+        """Remove uma cópia conhecida quando o destino é redefinido."""
         key = temp_key(dest)
         if key:
             env.pop(key, None)
