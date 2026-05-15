@@ -13,6 +13,7 @@ from src.representacao_intermedia.instrucoes import (
     IRStop,
 )
 
+from .cfg import build_cfg, flatten_cfg
 from .utils import is_false_literal, is_true_literal
 
 
@@ -51,19 +52,15 @@ def jump_simplification(instructions: list[IRInstr]) -> list[IRInstr]:
 
 
 def dead_code_elimination(instructions: list[IRInstr]) -> list[IRInstr]:
-    """Remove instruções inalcançáveis após salto incondicional ou paragem."""
+    """Remove blocos inalcançáveis usando a CFG leve."""
+    cfg = build_cfg(instructions)
+    if not cfg.blocks:
+        return []
 
-    result: list[IRInstr] = []
-    unreachable = False
-
-    for instr in instructions:
-        if isinstance(instr, (IRLabelInstr, IRProcBegin, IRProcEnd)):
-            unreachable = False
-
-        if not unreachable:
-            result.append(instr)
-
-        if isinstance(instr, (IRJump, IRStop, IRReturn)):
-            unreachable = True
-
-    return result
+    reachable = cfg.reachable_blocks()
+    keep_blocks = {
+        block.id
+        for block in cfg.blocks
+        if block.id in reachable or isinstance(block.first, (IRProcBegin, IRProcEnd))
+    }
+    return flatten_cfg(cfg, keep_blocks)

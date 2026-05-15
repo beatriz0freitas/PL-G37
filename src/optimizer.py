@@ -9,6 +9,9 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from src.otimizacao import (
+    BasicBlock,
+    ControlFlowGraph,
+    build_cfg,
     common_subexpression_elimination,
     constant_folding,
     constant_propagation,
@@ -46,6 +49,9 @@ def optimize(instructions: list[IRInstr]) -> list[IRInstr]:
 
 
 __all__ = [
+    "BasicBlock",
+    "ControlFlowGraph",
+    "build_cfg",
     "common_subexpression_elimination",
     "constant_folding",
     "constant_propagation",

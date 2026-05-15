@@ -101,7 +101,8 @@ def used_temps_in_instr(instr: IRInstr) -> set[str]:
             used |= used_temps_in_value(item)
     elif isinstance(instr, IRRead):
         for arg in instr.args:
-            used |= used_temps_in_value(arg)
+            if isinstance(arg, IRArrayRef):
+                used |= used_temps_in_value(arg)
     elif isinstance(instr, IRStoreArray):
         used |= used_temps_in_value(instr.src)
         for idx in instr.indices:
@@ -122,7 +123,14 @@ def defined_temp(instr: IRInstr) -> str | None:
         return str(instr.dest)
     if isinstance(instr, IRLoadArray) and isinstance(instr.dest, Temp):
         return str(instr.dest)
+    if isinstance(instr, IRCall) and isinstance(instr.dest, Temp):
+        return str(instr.dest)
     return None
+
+
+def is_side_effect_free(instr: IRInstr) -> bool:
+    """Indica se uma definição morta pode ser removida sem alterar efeitos."""
+    return isinstance(instr, (IRAssign, IROp, IRUnaryOp, IRLoadArray))
 
 
 def split_basic_blocks(instructions: list[IRInstr]) -> list[list[IRInstr]]:
@@ -145,51 +153,64 @@ def split_basic_blocks(instructions: list[IRInstr]) -> list[list[IRInstr]]:
 def rewrite_with_subst(instr: IRInstr, subst: Substituter) -> IRInstr | None:
     """Reescreve usos de uma instrução com uma função de substituição."""
 
+    def rewrite_value(value: Any) -> Any:
+        """Aplica substituição também dentro de referências indexadas."""
+        if isinstance(value, IRArrayRef):
+            return IRArrayRef(value.name, [rewrite_value(idx) for idx in value.indices])
+        return subst(value)
+
     if isinstance(instr, IRAssign):
-        return IRAssign(dest=instr.dest, src=subst(instr.src))
+        return IRAssign(dest=instr.dest, src=rewrite_value(instr.src))
     if isinstance(instr, IROp):
         return IROp(
             op=instr.op,
             dest=instr.dest,
-            left=subst(instr.left),
-            right=subst(instr.right),
+            left=rewrite_value(instr.left),
+            right=rewrite_value(instr.right),
         )
     if isinstance(instr, IRUnaryOp):
         return IRUnaryOp(
             op=instr.op,
             dest=instr.dest,
-            operand=subst(instr.operand),
+            operand=rewrite_value(instr.operand),
         )
     if isinstance(instr, IRCJump):
         return IRCJump(
-            cond=subst(instr.cond),
+            cond=rewrite_value(instr.cond),
             true_label=instr.true_label,
             false_label=instr.false_label,
         )
     if isinstance(instr, IRPrint):
-        return IRPrint(args=[subst(arg) for arg in instr.args])
+        return IRPrint(args=[rewrite_value(arg) for arg in instr.args])
     if isinstance(instr, IRWrite):
         return IRWrite(
-            unit=subst(instr.unit) if instr.unit is not None else None,
-            fmt=subst(instr.fmt) if instr.fmt is not None else None,
-            items=[subst(item) for item in instr.items],
+            unit=rewrite_value(instr.unit) if instr.unit is not None else None,
+            fmt=rewrite_value(instr.fmt) if instr.fmt is not None else None,
+            items=[rewrite_value(item) for item in instr.items],
         )
     if isinstance(instr, IRLoadArray):
         return IRLoadArray(
             dest=instr.dest,
             name=instr.name,
-            indices=[subst(idx) for idx in instr.indices],
+            indices=[rewrite_value(idx) for idx in instr.indices],
         )
     if isinstance(instr, IRStoreArray):
         return IRStoreArray(
             name=instr.name,
-            indices=[subst(idx) for idx in instr.indices],
-            src=subst(instr.src),
+            indices=[rewrite_value(idx) for idx in instr.indices],
+            src=rewrite_value(instr.src),
+        )
+    if isinstance(instr, IRRead):
+        return IRRead(
+            args=[
+                rewrite_value(arg) if isinstance(arg, IRArrayRef) else arg
+                for arg in instr.args
+            ],
         )
     if isinstance(instr, IRCall):
         return IRCall(
             name=instr.name,
-            args=[subst(arg) for arg in instr.args],
+            args=[rewrite_value(arg) for arg in instr.args],
             dest=instr.dest,
         )
     return None
