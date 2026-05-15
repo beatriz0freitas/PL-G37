@@ -46,7 +46,9 @@ No modo *fixed-form*, o pré-processador interpreta:
 -   coluna 6 como continuação;
 -   colunas 7-72 como zona de código.
 
-Também foi adicionada tolerância para ficheiros menos rígidos, usados frequentemente em editores modernos. No modo *free-form*, são suportados comentários com `!` e continuação com `&`.
+ Também foi adicionada tolerância para ficheiros menos rígidos, usados frequentemente em editores modernos. No modo *free-form*, são suportados comentários com `!` e continuação com `&`.
+
+ Na CLI, quando o formato é `auto`, a deteção heurística ignora ocorrências de `!` e `&` dentro de *strings* e comentários para reduzir falsos positivos. A prioridade é dada a padrões típicos de fixed-form (labels em colunas 1–5 e continuação na coluna 6), e só depois a sinais de free-form.
 
 O lexer reconhece palavras-chave (`PROGRAM`, `INTEGER`, `REAL`, `IF`, `DO`, `GOTO`, etc.), identificadores, inteiros, reais, lógicos, strings, operadores aritméticos, operadores relacionais pontuados (`.EQ.`, `.LE.`, etc.), operadores lógicos (`.AND.`, `.OR.`, `.NOT.`) e pontuação. Como Fortran é case-insensitive, identificadores e palavras-chave são normalizados para maiúsculas.
 
@@ -101,6 +103,8 @@ Validações implementadas:
 -   aridade de funções e subrotinas;
 -   separação entre função e subrotina;
 -   suporte a intrínsecas como `MOD`, `INT`, `REAL`, `FLOAT`, `ABS`, `SQRT`, `MAX` e `MIN`.
+-   suporte a `IMPLICIT NONE` (desativa tipagem implícita quando presente);
+-   tipagem implícita opcional via CLI (`--implicit-typing`), seguindo a regra F77 (I–N → `INTEGER`, restantes → `REAL`).
 
 As conversões numéricas simples entre `INTEGER`, `REAL` e `DOUBLE PRECISION` são permitidas na semântica e concretizadas no backend com instruções como `ITOF` e `FTOI`.
 
@@ -227,15 +231,14 @@ A execução final na EWVM do docente pode ser feita copiando o conteúdo gerado
 
 O compilador implementa um subconjunto significativo, mas não todo o standard Fortran 77. Limitações conhecidas:
 
--   sem `IMPLICIT NONE` efetivo;
--   sem implicit typing de variáveis não declaradas;
+-   tipagem implícita desligada por omissão (só ativa com `--implicit-typing` ou `IMPLICIT NONE` ausente);
 -   potência limitada a `INTEGER ** INTEGER` com expoente não negativo;
 -   sem potência real ou expoentes negativos;
 -   passagem de argumentos por referência ainda não é completa;
 -   sem execução automática contra a VM remota;
 -   otimizações globais avançadas não foram implementadas.
 
-Como trabalho futuro, faria sentido melhorar a convenção de chamada por referência, automatizar a execução EWVM, suportar implicit typing opcional, ampliar a cobertura de formatos Fortran e acrescentar otimizações globais como eliminação de subexpressões comuns.
+Como trabalho futuro, faria sentido melhorar a convenção de chamada por referência, automatizar a execução EWVM, ampliar a cobertura de formatos Fortran e acrescentar otimizações globais como eliminação de subexpressões comuns.
 
 ## 14\. Conclusão
 

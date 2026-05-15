@@ -27,6 +27,8 @@ def parse_args():
     p.add_argument("--format", dest="source_format",
                    choices=["fixed", "free", "auto"], default="auto")
     p.add_argument("--debug", action="store_true")
+    p.add_argument("--implicit-typing", action="store_true",
+                   help="Ativa tipagem implícita Fortran 77 (I-N -> INTEGER)")
     return p.parse_args()
 
 
@@ -256,6 +258,7 @@ def main():
     config.source_format = args.source_format
     config.debug = args.debug
     config.input_file = args.input
+    config.implicit_typing = args.implicit_typing
     config.validate()
 
     path = Path(args.input)

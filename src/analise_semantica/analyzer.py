@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import src.analise_sintatica.ast_nodes as ast
+from src.config import config
 from src.errors import SemanticError, SourceLocation
 
 from .intrinsics import INTRINSICS
@@ -25,6 +26,8 @@ class SemanticAnalyzer:
         self.initialized: set[str] = set()
         self.labels: dict[int, ast.Node] = {}
         self.current_function: ast.FunctionDef | None = None
+        self.implicit_none = False
+        self.implicit_typing = config.implicit_typing
 
     def analyze(self, program: ast.Program, filename: str = "<stdin>") -> ast.Program:
         self.filename = filename
@@ -35,6 +38,8 @@ class SemanticAnalyzer:
         self.initialized = set()
         self.labels = {}
         self.current_function = None
+        self.implicit_none = self._scan_implicit_none(program.decls)
+        self.implicit_typing = config.implicit_typing
 
         self._declare_symbols(program.decls, self.symbols, allow_function_typing=True)
         self._collect_labels(program.stmts)
@@ -76,11 +81,15 @@ class SemanticAnalyzer:
         prev_initialized = self.initialized
         prev_labels = self.labels
         prev_function = self.current_function
+        prev_implicit_none = self.implicit_none
+        prev_implicit_typing = self.implicit_typing
 
         self.symbols = SymbolTable()
         self.initialized = set()
         self.labels = {}
         self.current_function = subprogram if isinstance(subprogram, ast.FunctionDef) else None
+        self.implicit_none = self._scan_implicit_none(subprogram.decls)
+        self.implicit_typing = config.implicit_typing
 
         if isinstance(subprogram, ast.FunctionDef):
             subprogram.return_type = subprogram.return_type.upper()
@@ -106,7 +115,12 @@ class SemanticAnalyzer:
         self.initialized = prev_initialized
         self.labels = prev_labels
         self.current_function = prev_function
+        self.implicit_none = prev_implicit_none
+        self.implicit_typing = prev_implicit_typing
         return subprogram
+
+    def _scan_implicit_none(self, decls: list[ast.Node]) -> bool:
+        return any(isinstance(decl, ast.ImplicitNone) for decl in decls)
 
     def _declare_symbols(
         self,
@@ -116,6 +130,8 @@ class SemanticAnalyzer:
         allow_function_typing: bool = False,
     ) -> None:
         for decl in decls:
+            if isinstance(decl, ast.ImplicitNone):
+                continue
             if not isinstance(decl, ast.TypeDecl):
                 continue
             typename = decl.typename.upper()
@@ -139,7 +155,11 @@ class SemanticAnalyzer:
         for param in subprogram.params:
             symbol = self.symbols.lookup(param)
             if symbol is None:
-                self._error(subprogram.lineno, f"Parâmetro '{param}' usado sem declaração de tipo")
+                if self._implicit_typing_enabled():
+                    typename = self._implicit_type(param)
+                    symbol = self.symbols.declare_scalar(param, typename, subprogram.lineno, filename=self.filename)
+                else:
+                    self._error(subprogram.lineno, f"Parâmetro '{param}' usado sem declaração de tipo")
             if symbol.kind != "scalar":
                 self._error(subprogram.lineno, f"Parâmetro '{param}' tem de ser escalar")
             self._mark_initialized(param)
@@ -157,6 +177,8 @@ class SemanticAnalyzer:
                 self._collect_labels(stmt.else_stmts)
 
     def _visit_decl(self, decl: ast.TypeDecl) -> ast.TypeDecl:
+        if isinstance(decl, ast.ImplicitNone):
+            return decl
         decl.typename = decl.typename.upper()
         normalized: list[str | ast.ArrayDecl] = []
         for var in decl.variables:
@@ -239,7 +261,7 @@ class SemanticAnalyzer:
         return stmt
 
     def _visit_do(self, stmt: ast.DoStmt) -> ast.DoStmt:
-        symbol = self.symbols.require(stmt.var, stmt.lineno, filename=self.filename)
+        symbol = self._require_scalar(stmt.var, stmt.lineno)
         if symbol.kind != "scalar":
             self._error(stmt.lineno, f"Variável de controlo do DO tem de ser escalar: {stmt.var}")
         if symbol.type_name not in NUMERIC_TYPES:
@@ -302,7 +324,7 @@ class SemanticAnalyzer:
 
     def _rewrite_lvalue(self, node: ast.Node) -> tuple[ast.VarRef | ast.ArrayRef, str]:
         if isinstance(node, ast.VarRef):
-            symbol = self.symbols.require(node.name, node.lineno, filename=self.filename)
+            symbol = self._require_scalar(node.name, node.lineno)
             node.name = symbol.name
             if symbol.kind != "scalar":
                 self._error(node.lineno, f"'{node.name}' não é uma variável escalar")
@@ -347,7 +369,7 @@ class SemanticAnalyzer:
         return node, getattr(node, "sem_type")
 
     def _rewrite_var_expr(self, node: ast.VarRef) -> tuple[ast.VarRef, str]:
-        symbol = self.symbols.require(node.name, node.lineno, filename=self.filename)
+        symbol = self._require_scalar(node.name, node.lineno)
         node.name = symbol.name
         if symbol.kind == "array":
             self._error(node.lineno, f"Array '{node.name}' usado sem índices")
@@ -408,6 +430,23 @@ class SemanticAnalyzer:
         node.args = arg_nodes
         self._annotate(node, result_type, Symbol(name=name, kind="intrinsic", type_name=result_type, arity=len(arg_nodes)))
         return node, result_type
+
+    def _implicit_typing_enabled(self) -> bool:
+        return self.implicit_typing and not self.implicit_none
+
+    def _implicit_type(self, name: str) -> str:
+        first = name.strip().upper()[:1]
+        if "I" <= first <= "N":
+            return "INTEGER"
+        return "REAL"
+
+    def _require_scalar(self, name: str, lineno: int) -> Symbol:
+        symbol = self.symbols.lookup(name)
+        if symbol is None and self._implicit_typing_enabled():
+            symbol = self.symbols.declare_scalar(name, self._implicit_type(name), lineno, filename=self.filename)
+        if symbol is None:
+            self._error(lineno, f"Identificador '{name.upper()}' usado sem declaração")
+        return symbol
 
     def _rewrite_unary(self, node: ast.UnaryOp) -> tuple[ast.UnaryOp, str]:
         operand, operand_type = self._rewrite_expr(node.operand)

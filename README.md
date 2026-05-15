@@ -117,13 +117,14 @@ make help
 O compilador é executado por fases com:
 
 ```bash
-python -m src --stage <fase> [--format auto|fixed|free] [--debug] <ficheiro>
+python -m src --stage <fase> [--format auto|fixed|free] [--implicit-typing] [--debug] <ficheiro>
 ```
 
 ### Sintaxe dos argumentos
 
 - `--stage`: fase do pipeline (`lex`, `parse`, `sem`, `ir`, `opt`, `codegen`)
 - `--format`: formato do fonte (`auto` por omissão, ou `fixed`/`free`)
+- `--implicit-typing`: ativa tipagem implícita Fortran 77 (I–N → INTEGER, restantes → REAL)
 - `--debug`: saída detalhada para depuração
 - `<ficheiro>`: caminho para o `.f`
 

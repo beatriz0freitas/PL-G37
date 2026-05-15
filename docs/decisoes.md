@@ -31,7 +31,7 @@ Fortran 77 source (.f)
 
 ### Linguagem alvo
 
-Fortran 77 é uma linguagem **case-insensitive**, com formato de linha fixo (colunas 1–72), sem inferência de tipos (via *implicit typing* — decidiu-se não suportar implicitly-typed variables por simplicidade), e com construções de controlo de fluxo baseadas em labels numéricos (`DO <label>`, `GOTO <label>`, IF aritmético).
+Fortran 77 é uma linguagem **case-insensitive**, com formato de linha fixo (colunas 1–72) e construções de controlo de fluxo baseadas em labels numéricos (`DO <label>`, `GOTO <label>`, IF aritmético). O projeto suporta tipagem implícita **opcional** (ativada via `--implicit-typing`) e reconhece `IMPLICIT NONE` para desativá-la quando presente no código.
 
 ---
 

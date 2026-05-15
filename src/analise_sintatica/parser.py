@@ -107,6 +107,10 @@ class Fortran77Parser:
         """decl : type_spec var_decl_list"""
         p[0] = ast.TypeDecl(typename=p[1], variables=p[2], lineno=p.lineno(1))
 
+    def p_decl_implicit_none(self, p):
+        """decl : IMPLICIT NONE"""
+        p[0] = ast.ImplicitNone(lineno=p.lineno(1))
+
     def p_type_spec(self, p):
         """type_spec : INTEGER
                      | REAL
