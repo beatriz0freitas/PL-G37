@@ -31,7 +31,41 @@ def parse_args():
 
 
 def detect_source_format(source: str) -> str:
-    """Deteta heurísticamente se o ficheiro parece fixed-form ou free-form."""
+    """Deteta heurísticamente se o ficheiro parece fixed-form ou free-form.
+
+    Nota: ignora símbolos dentro de strings e comentários para evitar falsos
+    positivos com '&' e '!'.
+    """
+
+    def _strip_comments_and_strings(line: str) -> str:
+        in_str = False
+        cleaned: list[str] = []
+        i = 0
+        while i < len(line):
+            ch = line[i]
+            if ch == "!" and not in_str:
+                break
+            if ch == "'":
+                if in_str:
+                    if i + 1 < len(line) and line[i + 1] == "'":
+                        cleaned.append(" ")
+                        cleaned.append(" ")
+                        i += 2
+                        continue
+                    in_str = False
+                    cleaned.append(" ")
+                    i += 1
+                    continue
+                in_str = True
+                cleaned.append(" ")
+                i += 1
+                continue
+            if in_str:
+                cleaned.append(" ")
+            else:
+                cleaned.append(ch)
+            i += 1
+        return "".join(cleaned)
 
     fixed_score = 0
     free_score = 0
@@ -41,9 +75,17 @@ def detect_source_format(source: str) -> str:
         if not line.strip():
             continue
 
-        stripped = line.lstrip()
+        if line and line[0] in ("C", "c", "*", "!"):
+            fixed_score += 1
+            continue
 
-        if stripped.startswith("!") or "&" in line:
+        clean_line = _strip_comments_and_strings(line)
+        if not clean_line.strip():
+            continue
+
+        stripped = clean_line.lstrip()
+
+        if "&" in clean_line or stripped.startswith("!"):
             free_score += 2
 
         if len(line) >= 6:
@@ -53,9 +95,6 @@ def detect_source_format(source: str) -> str:
                 fixed_score += 3
             if cont_col not in (" ", "0", "\t") and label_zone.strip() == "":
                 fixed_score += 2
-
-        if line and line[0] in ("C", "c", "*"):
-            fixed_score += 1
 
     return "fixed" if fixed_score > free_score else "free"
 
