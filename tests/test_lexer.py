@@ -363,7 +363,22 @@ class TestFreeForm:
 
 
 # ---------------------------------------------------------------------------
-# 11. Números de linha
+# 11. Diagnósticos
+# ---------------------------------------------------------------------------
+
+class TestLexerDiagnostics:
+
+    def test_erro_lexico_mostra_snippet_e_sublinhado(self, lexer):
+        with pytest.raises(LexError) as exc_info:
+            lex_str(lexer, "INTEGER N\nN = @\n", source_format="free")
+
+        msg = str(exc_info.value)
+        assert "N = @" in msg
+        assert "^" in msg
+
+
+# ---------------------------------------------------------------------------
+# 12. Números de linha
 # ---------------------------------------------------------------------------
 
 class TestLineNumbers:

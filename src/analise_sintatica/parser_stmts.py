@@ -12,8 +12,8 @@ class StmtRules:
         p[0] = []
 
     def p_stmt_list(self, p):
-        """stmt_list : stmt_list stmt"""
-        p[0] = p[1] + [p[2]]
+        """stmt_list : stmt_list stmt separators"""
+        p[0] = p[1] + ([] if p[2] is None else [p[2]])
 
     # Instrução com label opcional
     def p_stmt_labeled(self, p):
@@ -31,6 +31,11 @@ class StmtRules:
     def p_stmt_unlabeled(self, p):
         """stmt : unlabeled_stmt"""
         p[0] = p[1]
+
+    def p_stmt_error(self, p):
+        """stmt : error"""
+        self.parser.errok()
+        p[0] = None
 
     # Instruções sem label
     def p_unlabeled_stmt(self, p):
@@ -62,21 +67,21 @@ class StmtRules:
 
     # IF-THEN-ELSE-ENDIF
     def p_if_stmt(self, p):
-        """if_stmt : IF LPAREN expr RPAREN THEN stmt_list elseif_chain ENDIF"""
+        """if_stmt : IF LPAREN expr RPAREN THEN separators stmt_list elseif_chain ENDIF"""
         p[0] = ast.IfStmt(
             condition=p[3],
-            then_stmts=p[6],
-            else_stmts=self._build_elseif_branch(p[7]),
+            then_stmts=p[7],
+            else_stmts=self._build_elseif_branch(p[8]),
             lineno=p.lineno(1),
         )
 
     def p_elseif_chain_elseif(self, p):
-        """elseif_chain : ELSEIF LPAREN expr RPAREN THEN stmt_list elseif_chain"""
-        p[0] = [(p[3], p[6], p.lineno(1))] + p[7]
+        """elseif_chain : ELSEIF LPAREN expr RPAREN THEN separators stmt_list elseif_chain"""
+        p[0] = [(p[3], p[7], p.lineno(1))] + p[8]
 
     def p_elseif_chain_else(self, p):
-        """elseif_chain : ELSE stmt_list"""
-        p[0] = [("ELSE", p[2])]
+        """elseif_chain : ELSE separators stmt_list"""
+        p[0] = [("ELSE", p[3])]
 
     def p_elseif_chain_empty(self, p):
         """elseif_chain :"""

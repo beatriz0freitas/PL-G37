@@ -130,6 +130,8 @@ def _raise_with_format_hint(
     raise ParseError(
         f"{err.message}. Dica: o ficheiro parece estar em formato {alternate!r}; tenta usar --format {alternate}",
         err.location,
+        source_line=err.source_line,
+        length=err.length,
     )
 
 
@@ -311,6 +313,7 @@ def main():
             return
 
     except CompileError as e:
+        e.attach_source(source)
         print(e, file=sys.stderr)
         sys.exit(1)
 

@@ -7,7 +7,7 @@ produz LogicalLine com label já extraído.
 import re
 import ply.lex as lex
 
-from src.errors import LexError, SourceLocation
+from src.errors import LexError, SourceLocation, source_line_at
 from src.analise_lexica.processor import preprocess_fixed, preprocess_free
 
 # Lexer PLY 
@@ -86,6 +86,8 @@ class Fortran77Lexer:
         # Pontuação
         "LPAREN", "RPAREN",
         "COMMA", "COLON", "EQUALS",
+        # Separador lógico interno usado pelo parser.
+        "NEWLINE",
     ] + list(reserved.values())
 
     # Regras simples
@@ -156,13 +158,17 @@ class Fortran77Lexer:
         """Reporta caracteres que nenhuma regra léxica reconheceu."""
         raise LexError(
             f"Carácter ilegal {t.value[0]!r}",
-            SourceLocation(self._filename, self._current_lineno, t.lexpos + 1),
+            SourceLocation(self._filename, self._current_lineno, self._current_column + t.lexpos),
+            source_line=source_line_at(self._source, self._current_lineno),
+            length=1,
         )
  
     def __init__(self):
         """Inicializa metadados usados em mensagens de erro e instância PLY."""
         self._filename       = "<stdin>"
+        self._source         = ""
         self._current_lineno = 1
+        self._current_column = 1
         self.lexer           = None
  
     def build(self, **kwargs):
@@ -170,23 +176,47 @@ class Fortran77Lexer:
         self.lexer = lex.lex(module=self, reflags=re.IGNORECASE, **kwargs)
         return self
  
-    def tokenize(self, source: str, filename: str = "<stdin>",
-                 source_format: str = "fixed") -> list:
+    def tokenize(
+        self,
+        source: str,
+        filename: str = "<stdin>",
+        source_format: str = "fixed",
+        include_newlines: bool = False,
+    ) -> list:
         """Tokeniza o texto Fortran e devolve lista de LexToken."""
         self._filename = filename
-        logical_lines = (preprocess_fixed if source_format == "fixed"
-                         else preprocess_free)(source, filename)
+        self._source = source
+        try:
+            logical_lines = (preprocess_fixed if source_format == "fixed"
+                             else preprocess_free)(source, filename)
+        except LexError as err:
+            raise err.attach_source(source)
+
         all_tokens: list = []
         for ll in logical_lines:
             self._current_lineno = ll.lineno
+            self._current_column = ll.column
             if ll.label is not None:
                 tok = lex.LexToken()
-                tok.type, tok.value, tok.lineno, tok.lexpos = "LABEL", ll.label, ll.lineno, 0
+                tok.type, tok.value, tok.lineno = "LABEL", ll.label, ll.lineno
+                tok.lexpos = (ll.label_column or 1) - 1
+                tok.length = len(str(ll.label))
                 all_tokens.append(tok)
             lx = self.lexer.clone()
             lx.lineno = 1
             lx.input(ll.code)
             for tok in lx:
+                relative_lexpos = tok.lexpos
+                tok.length = max(1, lx.lexpos - relative_lexpos)
                 tok.lineno = ll.lineno
+                tok.lexpos = ll.column - 1 + relative_lexpos
+                all_tokens.append(tok)
+            if include_newlines:
+                tok = lex.LexToken()
+                tok.type = "NEWLINE"
+                tok.value = "\n"
+                tok.lineno = ll.lineno
+                tok.lexpos = ll.column - 1 + len(ll.code)
+                tok.length = 1
                 all_tokens.append(tok)
         return all_tokens

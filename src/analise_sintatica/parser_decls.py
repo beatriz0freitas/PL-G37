@@ -8,14 +8,14 @@ class DeclRules:
 
     # Ponto de entrada
     def p_program(self, p):
-        """program : PROGRAM ID body END subprogram_list"""
-        decls, stmts = p[3]
+        """program : opt_separators PROGRAM ID separators body END opt_separators subprogram_list opt_separators"""
+        decls, stmts = p[5]
         p[0] = ast.Program(
-            name=p[2],
+            name=p[3],
             decls=decls,
             stmts=stmts,
-            subprograms=p[5],
-            lineno=p.lineno(1),
+            subprograms=p[8],
+            lineno=p.lineno(2),
         )
 
     # body agrupa declarações (antes) e instruções (depois)
@@ -29,8 +29,8 @@ class DeclRules:
         p[0] = []
 
     def p_decl_list(self, p):
-        """decl_list : decl_list decl"""
-        p[0] = p[1] + [p[2]]
+        """decl_list : decl_list decl separators"""
+        p[0] = p[1] + ([] if p[2] is None else [p[2]])
 
     def p_decl_type(self, p):
         """decl : type_spec var_decl_list"""
@@ -39,6 +39,11 @@ class DeclRules:
     def p_decl_implicit_none(self, p):
         """decl : IMPLICIT NONE"""
         p[0] = ast.ImplicitNone(lineno=p.lineno(1))
+
+    def p_decl_error(self, p):
+        """decl : error"""
+        self.parser.errok()
+        p[0] = None
 
     def p_type_spec(self, p):
         """type_spec : INTEGER

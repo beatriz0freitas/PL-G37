@@ -12,7 +12,7 @@ Gramática coberta:
 
 import ply.yacc as yacc
 
-from src.errors import ParseError, SourceLocation
+from src.errors import ParseError, SourceLocation, source_line_at
 from src.analise_lexica.lexer import Fortran77Lexer
 import src.analise_sintatica.ast_nodes as ast
 from src.analise_sintatica.parser_decls import DeclRules
@@ -37,6 +37,10 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
         self.lexer = lexer
         self.tokens = lexer.tokens          # PLY exige este atributo
         self._filename = "<stdin>"
+        self._source = ""
+        self._source_lines: list[str] = []
+        self._parse_errors: list[ParseError] = []
+        self._parse_error_keys: set[tuple[int, int, str]] = set()
         self.parser = None
 
     def _build_elseif_branch(self, chain: list):
@@ -57,6 +61,23 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
             lineno=lineno,
         )
         return [nested_if]
+
+    # Separadores lógicos de linha: produzidos só no caminho parser.parse().
+    def p_separators_single(self, p):
+        """separators : NEWLINE"""
+        p[0] = None
+
+    def p_separators_multi(self, p):
+        """separators : separators NEWLINE"""
+        p[0] = None
+
+    def p_opt_separators_empty(self, p):
+        """opt_separators :"""
+        p[0] = None
+
+    def p_opt_separators_some(self, p):
+        """opt_separators : separators"""
+        p[0] = None
 
     # ------------------------------------------------------------------
     # Precedência (do menor para o maior)
@@ -86,21 +107,43 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
     )
 
     # Tratamento de erros
+    def _record_parse_error(self, message: str, location: SourceLocation, length: int = 1) -> None:
+        """Acumula um erro sintático, evitando duplicados da recuperação PLY."""
+        key = (location.line, location.column, message)
+        if key in self._parse_error_keys:
+            return
+        self._parse_error_keys.add(key)
+        self._parse_errors.append(ParseError(
+            message,
+            location,
+            source_line=source_line_at(self._source, location.line),
+            length=length,
+        ))
+
     def p_error(self, p):
-        """Converte erros PLY em ParseError com localização de fonte."""
+        """Regista erros PLY e deixa a recuperação tentar continuar."""
         if p:
             column = getattr(p, "lexpos", -1)
-            column = column + 1 if column >= 0 else 0
-            raise ParseError(
-                f"Erro de sintaxe em {p.value!r}",
+            column = column + 1 if column >= 0 else 1
+            length = getattr(p, "length", len(str(getattr(p, "value", ""))) or 1)
+            if getattr(p, "type", None) == "NEWLINE":
+                message = "Erro de sintaxe no fim da linha"
+            else:
+                message = f"Erro de sintaxe em {p.value!r}"
+            self._record_parse_error(
+                message,
                 SourceLocation(self._filename, p.lineno, column),
+                length=length,
             )
         else:
-            # EOF inesperado: indica a linha seguinte ao último caracter lido.
-            eof_line = self._source_line_count + 1
-            raise ParseError(
+            eof_line = max(1, self._source_line_count)
+            if self._source_lines:
+                eof_column = len(self._source_lines[-1]) + 1
+            else:
+                eof_column = 1
+            self._record_parse_error(
                 "Erro de sintaxe: fim de ficheiro inesperado",
-                SourceLocation(self._filename, eof_line, 1),
+                SourceLocation(self._filename, eof_line, eof_column),
             )
 
     # Construção e interface pública
@@ -116,8 +159,17 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
         depois alimenta o parser PLY.
         """
         self._filename = filename
-        self._source_line_count = source.count("\n")
-        tokens = self.lexer.tokenize(source, filename=filename, source_format=source_format)
+        self._source = source
+        self._source_lines = source.splitlines()
+        self._source_line_count = len(self._source_lines) or 1
+        self._parse_errors = []
+        self._parse_error_keys = set()
+        tokens = self.lexer.tokenize(
+            source,
+            filename=filename,
+            source_format=source_format,
+            include_newlines=True,
+        )
         # PLY yacc.parse espera um lexer com input()/token() — criamos um
         # adaptador simples a partir da lista de tokens já produzida.
         token_iter = iter(tokens)
@@ -146,4 +198,17 @@ class Fortran77Parser(DeclRules, StmtRules, ExprRules, SubprogramRules):
                 pass
 
         adapter = TokenAdapter(token_iter)
-        return self.parser.parse(lexer=adapter, tracking=True)
+        tree = self.parser.parse(lexer=adapter, tracking=True)
+        if self._parse_errors:
+            if len(self._parse_errors) == 1:
+                raise self._parse_errors[0]
+            raise ParseError(errors=self._parse_errors)
+        if tree is None:
+            raise ParseError(
+                "Erro de sintaxe",
+                SourceLocation(self._filename, self._source_line_count, 1),
+                source_line=source_line_at(self._source, self._source_line_count),
+            )
+        setattr(tree, "_source", source)
+        setattr(tree, "_source_lines", self._source_lines)
+        return tree

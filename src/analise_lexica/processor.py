@@ -15,13 +15,22 @@ _FREE_LABEL_RE = re.compile(r"^\s*(\d+)\s+(.+)$")
 
 class LogicalLine:
     """Uma linha lógica Fortran após resolução de continuações."""
-    __slots__ = ("code", "lineno", "label")
+    __slots__ = ("code", "lineno", "label", "column", "label_column")
 
-    def __init__(self, code: str, lineno: int, label: int | None):
+    def __init__(
+        self,
+        code: str,
+        lineno: int,
+        label: int | None,
+        column: int = 1,
+        label_column: int | None = None,
+    ):
         """Guarda código normalizado, linha original e label opcional."""
-        self.code   = code    # texto do código (pronto para o lexer PLY)
-        self.lineno = lineno  # nº da 1ª linha física desta linha lógica
-        self.label  = label   # int se houver label numérico, None caso contrário
+        self.code         = code          # texto do código (pronto para o lexer PLY)
+        self.lineno       = lineno        # nº da 1ª linha física desta linha lógica
+        self.label        = label         # int se houver label numérico, None caso contrário
+        self.column       = column        # coluna física onde code começa
+        self.label_column = label_column  # coluna física da label, se existir
 
     def __repr__(self):
         """Representação de depuração usada em testes e inspeção manual."""
@@ -45,6 +54,8 @@ def preprocess_fixed(source: str, filename: str = "<stdin>") -> list[LogicalLine
     cur_code: str | None = None
     cur_lineno = 0
     cur_label: int | None = None
+    cur_column = 1
+    cur_label_column: int | None = None
 
     for lineno, raw in enumerate(source.splitlines(), start=1):
         line = raw.rstrip("\r\n")
@@ -59,6 +70,9 @@ def preprocess_fixed(source: str, filename: str = "<stdin>") -> list[LogicalLine
         # Zona de label: colunas 1-5 (índices 0-4)
         label_zone = (line[:5] if len(line) >= 5 else line).strip()
         label_val: int | None = int(label_zone) if label_zone.isdigit() else None
+        label_column: int | None = None
+        if label_val is not None:
+            label_column = line[:5].find(label_zone) + 1
 
         # Coluna de continuação: índice 5 (coluna 6)
         # Só é continuação se a zona de label estiver vazia
@@ -69,9 +83,11 @@ def preprocess_fixed(source: str, filename: str = "<stdin>") -> list[LogicalLine
         if label_val is not None or is_cont:
             # Standard ANSI: código nas colunas 7-72
             code = (line[6:72] if len(line) > 6 else "").rstrip()
+            code_column = 7
         else:
             # Tolerância: código pode começar na coluna 1
             code = line.rstrip()
+            code_column = 1
 
         if is_cont:
             if cur_code is None:
@@ -82,13 +98,27 @@ def preprocess_fixed(source: str, filename: str = "<stdin>") -> list[LogicalLine
             cur_code += " " + code
         else:
             if cur_code is not None:
-                result.append(LogicalLine(cur_code, cur_lineno, cur_label))
+                result.append(LogicalLine(
+                    cur_code,
+                    cur_lineno,
+                    cur_label,
+                    cur_column,
+                    cur_label_column,
+                ))
             cur_code   = code
             cur_lineno = lineno
             cur_label  = label_val
+            cur_column = code_column
+            cur_label_column = label_column
 
     if cur_code is not None:
-        result.append(LogicalLine(cur_code, cur_lineno, cur_label))
+        result.append(LogicalLine(
+            cur_code,
+            cur_lineno,
+            cur_label,
+            cur_column,
+            cur_label_column,
+        ))
 
     return result
 
@@ -105,6 +135,8 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
     cur_code: str | None = None
     cur_lineno = 0
     cur_label: int | None = None
+    cur_column = 1
+    cur_label_column: int | None = None
 
     for lineno, raw in enumerate(source.splitlines(), start=1):
         line = raw.rstrip("\r\n")
@@ -138,9 +170,15 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
         if cur_code is None:
             label_match = _FREE_LABEL_RE.match(line)
             cur_label = None
+            cur_label_column = None
+            cur_column = 1
             if label_match:
                 cur_label = int(label_match.group(1))
-                line = label_match.group(2).lstrip()
+                cur_label_column = label_match.start(1) + 1
+                rest = label_match.group(2)
+                leading_spaces = len(rest) - len(rest.lstrip())
+                cur_column = label_match.start(2) + leading_spaces + 1
+                line = rest.lstrip()
 
             cur_code   = line
             cur_lineno = lineno
@@ -148,11 +186,24 @@ def preprocess_free(source: str, filename: str = "<stdin>") -> list[LogicalLine]
             cur_code += " " + line
 
         if not cont:
-            result.append(LogicalLine(cur_code, cur_lineno, cur_label))
+            result.append(LogicalLine(
+                cur_code,
+                cur_lineno,
+                cur_label,
+                cur_column,
+                cur_label_column,
+            ))
             cur_code = None
             cur_label = None
+            cur_label_column = None
 
     if cur_code is not None:
-        result.append(LogicalLine(cur_code, cur_lineno, cur_label))
+        result.append(LogicalLine(
+            cur_code,
+            cur_lineno,
+            cur_label,
+            cur_column,
+            cur_label_column,
+        ))
 
     return result

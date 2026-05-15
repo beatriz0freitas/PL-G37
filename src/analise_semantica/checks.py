@@ -119,4 +119,11 @@ class SemanticChecksMixin:
 
     def _error(self, lineno: int, message: str) -> None:
         """Lança um SemanticError com localização uniforme."""
-        raise SemanticError(message, SourceLocation(self.filename, lineno, 1))
+        source_line = None
+        if 1 <= lineno <= len(self.source_lines):
+            source_line = self.source_lines[lineno - 1]
+        raise SemanticError(
+            message,
+            SourceLocation(self.filename, lineno, 1),
+            source_line=source_line,
+        )

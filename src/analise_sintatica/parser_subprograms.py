@@ -20,8 +20,8 @@ class SubprogramRules:
         p[0] = p[1]
 
     def p_function_def(self, p):
-        """function_def : type_spec FUNCTION ID LPAREN param_list_opt RPAREN body END"""
-        decls, stmts = p[7]
+        """function_def : type_spec FUNCTION ID LPAREN param_list_opt RPAREN separators body END opt_separators"""
+        decls, stmts = p[8]
         p[0] = ast.FunctionDef(
             name=p[3],
             return_type=p[1],
@@ -32,10 +32,10 @@ class SubprogramRules:
         )
 
     def p_subroutine_def(self, p):
-        """subroutine_def : SUBROUTINE ID LPAREN param_list_opt RPAREN body END
-                          | SUBROUTINE ID body END"""
-        if len(p) == 5:
-            decls, stmts = p[3]
+        """subroutine_def : SUBROUTINE ID LPAREN param_list_opt RPAREN separators body END opt_separators
+                          | SUBROUTINE ID separators body END opt_separators"""
+        if len(p) == 7:
+            decls, stmts = p[4]
             p[0] = ast.SubroutineDef(
                 name=p[2],
                 params=[],
@@ -45,7 +45,7 @@ class SubprogramRules:
             )
             return
 
-        decls, stmts = p[6]
+        decls, stmts = p[7]
         p[0] = ast.SubroutineDef(
             name=p[2],
             params=p[4],

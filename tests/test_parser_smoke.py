@@ -159,6 +159,23 @@ class TestParserErrors:
 		msg = str(exc_info.value)
 		assert "bad_assign.f:" in msg
 		assert ": error: " in msg
+		assert "N =" in msg
+		assert "^" in msg
+
+	def test_parser_reporta_multiplos_erros_no_mesmo_run(self, parser):
+		src = """PROGRAM P
+				 INTEGER N
+				 N =
+				 PRINT *,
+				 END
+			  """
+		with pytest.raises(ParseError) as exc_info:
+			parse_str(parser, src, source_format="free", filename="multi_bad.f")
+
+		msg = str(exc_info.value)
+		assert msg.count(": error:") >= 2
+		assert "N =" in msg
+		assert "PRINT *," in msg
 
 	def test_erro_de_eof_inesperado(self, parser):
 		src = "PROGRAM P\nINTEGER N\n"
