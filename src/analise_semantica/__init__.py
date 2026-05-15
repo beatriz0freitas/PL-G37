@@ -3,7 +3,7 @@
 from .analyzer import SemanticAnalyzer, analyze
 from .intrinsics import INTRINSICS, IntrinsicSpec
 from .symbols import Symbol, SymbolTable, VALID_KINDS
-from .types import CHARACTER_TYPES, LOGICAL_TYPES, NUMERIC_TYPES
+from .types import CHARACTER_TYPES, LOGICAL_TYPES, NUMERIC_TYPES, REAL_LIKE_TYPES
 
 __all__ = [
     "CHARACTER_TYPES",
@@ -11,6 +11,7 @@ __all__ = [
     "IntrinsicSpec",
     "LOGICAL_TYPES",
     "NUMERIC_TYPES",
+    "REAL_LIKE_TYPES",
     "SemanticAnalyzer",
     "Symbol",
     "SymbolTable",

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.analise_semantica.types import REAL_LIKE_TYPES
 from src.representacao_intermedia.instrucoes import (
     IRAssign,
     IRCall,
@@ -15,9 +16,6 @@ from src.representacao_intermedia.instrucoes import (
     IRUnaryOp,
 )
 from src.representacao_intermedia.operadores import IRArrayRef, IRStringLit, Temp
-
-
-REAL_LIKE_TYPES = {"REAL", "DOUBLE PRECISION"}
 
 
 class TypeInferenceMixin:
