@@ -14,6 +14,8 @@ ArrayTypes = dict[str, tuple[str, list[int]]]
 
 @dataclass
 class SubprogramInfo:
+    """Metadados necessários para gerar código de um subprograma."""
+
     name: str
     kind: str
     params: list[str]
@@ -24,6 +26,8 @@ class SubprogramInfo:
 
 @dataclass
 class ProgramDeclInfo:
+    """Metadados globais recolhidos da AST semanticamente anotada."""
+
     scalar_types: ScalarTypes
     array_types: ArrayTypes
     subprograms: dict[str, SubprogramInfo]
@@ -42,6 +46,7 @@ def extract_decl_info(program: ast.Program) -> tuple[ScalarTypes, ArrayTypes]:
 
 
 def extract_program_decl_info(program: ast.Program) -> ProgramDeclInfo:
+    """Extrai metadados globais e de subprogramas para o backend."""
     symbol_table = getattr(program, "symbol_table", None)
     if not isinstance(symbol_table, SymbolTable):
         raise RuntimeError(

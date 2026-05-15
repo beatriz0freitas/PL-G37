@@ -18,6 +18,7 @@ class IRAssign(IRInstr):
     src: Any
 
     def __str__(self) -> str:
+        """Renderiza a atribuição em formato legível."""
         return f"{self.dest} = {self.src}"
 
 
@@ -30,6 +31,7 @@ class IRUnaryOp(IRInstr):
     operand: Any
 
     def __str__(self) -> str:
+        """Renderiza operação unária em formato legível."""
         return f"{self.dest} = {self.op} {self.operand}"
 
 
@@ -43,6 +45,7 @@ class IROp(IRInstr):
     right: Any
 
     def __str__(self) -> str:
+        """Renderiza operação binária em formato legível."""
         return f"{self.dest} = {self.left} {self.op} {self.right}"
 
 
@@ -53,6 +56,7 @@ class IRLabelInstr(IRInstr):
     label: Label
 
     def __str__(self) -> str:
+        """Renderiza marcador de label."""
         return f"{self.label}:"
 
 
@@ -63,6 +67,7 @@ class IRJump(IRInstr):
     label: Label
 
     def __str__(self) -> str:
+        """Renderiza salto incondicional."""
         return f"GOTO {self.label}"
 
 
@@ -75,6 +80,7 @@ class IRCJump(IRInstr):
     false_label: Label
 
     def __str__(self) -> str:
+        """Renderiza salto condicional."""
         return f"IF {self.cond} GOTO {self.true_label} ELSE GOTO {self.false_label}"
 
 
@@ -87,6 +93,7 @@ class IRCall(IRInstr):
     dest: Optional[Any] = None
 
     def __str__(self) -> str:
+        """Renderiza chamada com ou sem destino de retorno."""
         rendered_args = ", ".join(str(a) for a in self.args)
         if self.dest is None:
             return f"CALL {self.name}({rendered_args})"
@@ -103,6 +110,7 @@ class IRProcBegin(IRInstr):
     result_name: Optional[str] = None
 
     def __str__(self) -> str:
+        """Renderiza início de função ou subrotina."""
         rendered_params = ", ".join(self.params)
         if self.kind == "function":
             return f"FUNCTION {self.name}({rendered_params})"
@@ -116,6 +124,7 @@ class IRProcEnd(IRInstr):
     name: str
 
     def __str__(self) -> str:
+        """Renderiza fim de subprograma."""
         return f"ENDPROC {self.name}"
 
 
@@ -128,6 +137,7 @@ class IRLoadArray(IRInstr):
     indices: list[Any]
 
     def __str__(self) -> str:
+        """Renderiza leitura indexada de array."""
         ref = IRArrayRef(self.name, self.indices)
         return f"{self.dest} = {ref}"
 
@@ -141,6 +151,7 @@ class IRStoreArray(IRInstr):
     src: Any
 
     def __str__(self) -> str:
+        """Renderiza escrita indexada em array."""
         ref = IRArrayRef(self.name, self.indices)
         return f"{ref} = {self.src}"
 
@@ -152,6 +163,7 @@ class IRPrint(IRInstr):
     args: list[Any]
 
     def __str__(self) -> str:
+        """Renderiza lista de argumentos de PRINT."""
         rendered_args = ", ".join(str(a) for a in self.args)
         return f"PRINT {rendered_args}"
 
@@ -163,6 +175,7 @@ class IRRead(IRInstr):
     args: list[Any]
 
     def __str__(self) -> str:
+        """Renderiza lista de alvos de READ."""
         rendered_args = ", ".join(str(a) for a in self.args)
         return f"READ {rendered_args}"
 
@@ -176,6 +189,7 @@ class IRWrite(IRInstr):
     items: list[Any]
 
     def __str__(self) -> str:
+        """Renderiza WRITE com unidade, formato e itens."""
         rendered_items = ", ".join(str(a) for a in self.items)
         return f"WRITE ({self.unit}, {self.fmt}) {rendered_items}"
 
@@ -185,6 +199,7 @@ class IRStop(IRInstr):
     """Terminacao de programa."""
 
     def __str__(self) -> str:
+        """Renderiza STOP."""
         return "STOP"
 
 
@@ -193,4 +208,5 @@ class IRReturn(IRInstr):
     """Retorno de subprograma."""
 
     def __str__(self) -> str:
+        """Renderiza RETURN."""
         return "RETURN"

@@ -86,6 +86,8 @@
 * [X] Escopo semântico próprio por subprograma
 * [X] Suporte ao retorno de função via atribuição ao nome da função
 * [X] Stage `--stage sem` na CLI
+* [X] `IMPLICIT NONE` (desativa tipagem implícita quando presente)
+* [X] Tipagem implícita opcional via `--implicit-typing` (I–N → INTEGER)
 
 **Validação:**
 

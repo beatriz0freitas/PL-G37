@@ -11,6 +11,7 @@ class StackEmitterMixin:
     """Responsável por empilhar valores, guardar destinos e mapear operações."""
 
     def _binary_opcode(self, op: str, left: Any, right: Any) -> str:
+        """Mapeia um operador IR binário para o opcode EWVM apropriado."""
         cmp_ops = {
             "<": "INF",
             "<=": "INFEQ",
@@ -54,6 +55,7 @@ class StackEmitterMixin:
         return real_op if is_real else int_op
 
     def _emit_unary(self, op: str, operand: Any) -> None:
+        """Emite a sequência EWVM para operadores unários."""
         if op == "NOT":
             self.emit("NOT")
             return
@@ -70,6 +72,7 @@ class StackEmitterMixin:
         raise NotImplementedError(f"Operador unário sem tradução: {op}")
 
     def _emit_integer_power(self, left: Any, right: Any, dest: Any) -> None:
+        """Emite multiplicação repetida para potência inteira."""
         base_name = "@POW_BASE"
         exp_name = "@POW_EXP"
         result_name = "@POW_RESULT"
@@ -105,9 +108,11 @@ class StackEmitterMixin:
         self._pop_to(dest)
 
     def _push_value_for_target(self, value: Any, target: Any) -> None:
+        """Empilha um valor convertido para o tipo do destino."""
         self._push_value_for_type(value, self._type_of(target))
 
     def _push_value_for_type(self, value: Any, target_type: str) -> None:
+        """Empilha um valor aplicando conversão numérica quando necessária."""
         self._push_value(value)
         value_type = self._type_of(value)
         if self._is_real_type(target_type) and value_type == "INTEGER":
@@ -117,17 +122,20 @@ class StackEmitterMixin:
             self.emit("FTOI")
 
     def _push_numeric_value(self, value: Any, *, as_real: bool) -> None:
+        """Empilha um valor numérico, promovendo INTEGER para REAL se pedido."""
         self._push_value(value)
         if as_real and self._type_of(value) == "INTEGER":
             self.emit("ITOF")
 
     def _op_uses_real_stack(self, op: str, left: Any, right: Any) -> bool:
+        """Indica se uma operação binária deve usar opcodes reais."""
         numeric_ops = {"+", "-", "*", "/", "<", "<=", ">", ">=", "==", "!="}
         if op not in numeric_ops:
             return False
         return self._is_real_type(self._type_of(left)) or self._is_real_type(self._type_of(right))
 
     def _push_value(self, value: Any) -> None:
+        """Empilha qualquer valor IR suportado na stack EWVM."""
         if isinstance(value, bool):
             self.emit("PUSHI", 1 if value else 0)
             return
@@ -154,6 +162,7 @@ class StackEmitterMixin:
         raise NotImplementedError(f"Valor IR sem tradução para PUSH: {value!r}")
 
     def _pop_to(self, target: Any) -> None:
+        """Guarda o topo da stack no destino IR indicado."""
         if isinstance(target, Temp):
             self._store_symbol(str(target))
             return
@@ -163,6 +172,7 @@ class StackEmitterMixin:
         raise NotImplementedError(f"Destino IR sem tradução para POP: {target!r}")
 
     def _push_array_address(self, name: str, indices: list[Any]) -> None:
+        """Calcula e empilha o endereço efetivo de um elemento de array."""
         _, dims = self._active_array_types()[name]
         self._push_symbol(name)
 
@@ -183,6 +193,7 @@ class StackEmitterMixin:
             self.emit("PADD")
 
     def _push_symbol(self, name: str) -> None:
+        """Empilha o valor de um símbolo global ou local."""
         if self._current_frame is not None:
             if name in self._current_frame.param_offsets:
                 self.emit("PUSHL", self._current_frame.param_offsets[name])
@@ -193,6 +204,7 @@ class StackEmitterMixin:
         self.emit("PUSHG", self.layout.addr_of_scalar(name))
 
     def _store_symbol(self, name: str) -> None:
+        """Guarda o topo da stack num símbolo global ou local."""
         if self._current_frame is not None:
             if name in self._current_frame.param_offsets:
                 self.emit("STOREL", self._current_frame.param_offsets[name])
@@ -203,8 +215,10 @@ class StackEmitterMixin:
         self.emit("STOREG", self.layout.addr_of_scalar(name))
 
     def _is_string_literal(self, value: Any) -> bool:
+        """Identifica literais de string da IR."""
         return isinstance(value, IRStringLit)
 
     @staticmethod
     def _looks_like_identifier(value: str) -> bool:
+        """Filtra strings que parecem nomes e não literais textuais."""
         return bool(value) and (value[0].isalpha() or value[0] == "_") and all(ch.isalnum() or ch == "_" for ch in value)

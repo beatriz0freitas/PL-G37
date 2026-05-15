@@ -12,10 +12,12 @@ class MemoryLayout:
     next_addr: int = 0
 
     def __post_init__(self) -> None:
+        """Inicializa mapas de escalares e arrays depois da dataclass."""
         self.scalars: dict[str, int] = {}
         self.arrays: dict[str, tuple[int, list[int]]] = {}
 
     def allocate_scalar(self, name: str) -> int:
+        """Reserva um slot global para um escalar ou reutiliza o existente."""
         if name in self.scalars:
             return self.scalars[name]
         addr = self.next_addr
@@ -24,6 +26,7 @@ class MemoryLayout:
         return addr
 
     def allocate_array(self, name: str, dims: list[int]) -> int:
+        """Reserva um bloco contíguo global para um array."""
         if name in self.arrays:
             return self.arrays[name][0]
         total = 1
@@ -35,13 +38,16 @@ class MemoryLayout:
         return base
 
     def addr_of_scalar(self, name: str) -> int:
+        """Devolve o endereço global de um escalar já alocado."""
         return self.scalars[name]
 
     def array_info(self, name: str) -> tuple[int, list[int]]:
+        """Devolve endereço base e dimensões de um array já alocado."""
         return self.arrays[name]
 
     @property
     def total_cells(self) -> int:
+        """Número total de células globais reservadas."""
         return self.next_addr
 
 
@@ -58,6 +64,7 @@ class FrameLayout:
 
     @property
     def local_slot_count(self) -> int:
+        """Quantidade de slots locais a reservar no prólogo do subprograma."""
         if not self.local_offsets:
             return 0
         return max(self.local_offsets.values())

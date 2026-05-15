@@ -122,6 +122,33 @@ class TestIRLabelsAndFlow:
         assert any(lbl.label.name == "F20" for lbl in labels)
         assert any(lbl.label.name == "F30" for lbl in labels)
 
+    def test_arith_if_com_goto_resolve_todos_os_destinos(self, parser):
+        src = """      PROGRAM P
+      INTEGER X
+      X = 1
+      IF (X) 10, 20, 30
+ 10   GOTO 40
+ 20   GOTO 40
+ 30   GOTO 40
+ 40   CONTINUE
+      END
+"""
+        tree = parse_str(parser, src, source_format="fixed", filename="arith_if_goto.f")
+        ir = gen_ir(tree)
+
+        cjumps = [i for i in ir if isinstance(i, IRCJump)]
+        gotos = [i for i in ir if isinstance(i, IRJump)]
+        labels = [i for i in ir if isinstance(i, IRLabelInstr)]
+        cjump_targets = {
+            target.name
+            for jump in cjumps
+            for target in (jump.true_label, jump.false_label)
+        }
+
+        assert {"F10", "F20", "F30"} <= cjump_targets
+        assert any(jump.label.name == "F40" for jump in gotos)
+        assert any(label.label.name == "F40" for label in labels)
+
 
 class TestIRIOAndCalls:
 
@@ -150,6 +177,27 @@ class TestIRIOAndCalls:
         assert len(calls) == 2
         assert any(c.name == "MOD" and c.dest is not None for c in calls)
         assert any(c.name == "FOO" and c.dest is None for c in calls)
+
+    def test_intrinsecas_em_expressao_complexa_geram_calls_aninhados(self, parser):
+        src = """PROGRAM P
+                 INTEGER I, J, K
+                 REAL R
+                 I = 9
+                 J = 4
+                 K = 2
+                 R = SQRT(ABS(I - J) + MAX(MIN(I, J), MOD(I, K)))
+                 PRINT *, R
+                 END
+              """
+        tree = parse_str(parser, src, source_format="free", filename="intr_complex.f")
+        ir = gen_ir(tree)
+
+        calls = [i for i in ir if isinstance(i, IRCall)]
+        call_names = [call.name for call in calls]
+
+        assert call_names == ["ABS", "MIN", "MOD", "MAX", "SQRT"]
+        assert all(call.dest is not None for call in calls)
+        assert any(isinstance(i, IROp) and i.op == "+" for i in ir)
 
     def test_assign_array_gera_store_array(self, parser):
         src = """PROGRAM P

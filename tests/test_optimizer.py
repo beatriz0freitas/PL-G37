@@ -10,16 +10,23 @@ Cobre:
 import pytest
 
 from src.optimizer import (
+    build_cfg,
+    common_subexpression_elimination,
     constant_folding,
     constant_propagation,
+    copy_propagation,
     dead_code_elimination,
+    dead_store_elimination,
+    jump_simplification,
     optimize,
 )
 from src.representacao_intermedia.instrucoes import (
     IRAssign,
+    IRCall,
     IRCJump,
     IRJump,
     IRLabelInstr,
+    IRLoadArray,
     IROp,
     IRPrint,
     IRProcBegin,
@@ -29,7 +36,7 @@ from src.representacao_intermedia.instrucoes import (
     IRStop,
     IRUnaryOp,
 )
-from src.representacao_intermedia.operadores import Label, Temp
+from src.representacao_intermedia.operadores import IRArrayRef, Label, Temp
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +52,35 @@ def lbl(name: str) -> Label:
 
 
 # ---------------------------------------------------------------------------
-# 1. Constant Folding
+# 1. Basic Blocks / CFG
+# ---------------------------------------------------------------------------
+
+class TestBasicBlocksAndCfg:
+
+    def test_build_cfg_com_condicional_e_join(self):
+        ir = [
+            IRAssign(dest=t(1), src=1),
+            IRCJump(cond=t(1), true_label=lbl("T"), false_label=lbl("F")),
+            IRLabelInstr(lbl("T")),
+            IRPrint(args=[1]),
+            IRJump(lbl("END")),
+            IRLabelInstr(lbl("F")),
+            IRPrint(args=[0]),
+            IRLabelInstr(lbl("END")),
+            IRStop(),
+        ]
+
+        cfg = build_cfg(ir)
+
+        assert len(cfg.blocks) == 4
+        assert cfg.blocks[0].successors == {1, 2}
+        assert cfg.blocks[1].successors == {3}
+        assert cfg.blocks[2].successors == {3}
+        assert cfg.blocks[3].predecessors == {1, 2}
+
+
+# ---------------------------------------------------------------------------
+# 2. Constant Folding
 # ---------------------------------------------------------------------------
 
 class TestConstantFolding:
@@ -125,7 +160,7 @@ class TestConstantFolding:
 
 
 # ---------------------------------------------------------------------------
-# 2. Constant Propagation
+# 3. Constant Propagation
 # ---------------------------------------------------------------------------
 
 class TestConstantPropagation:
@@ -146,16 +181,63 @@ class TestConstantPropagation:
         result = constant_propagation(ir)
         assert result[1].left == "X"
 
-    def test_clear_env_at_label(self):
-        """Após um label, o ambiente é limpo (ponto de junção conservativo)."""
+    def test_propaga_atraves_de_label_com_um_predecessor(self):
+        """Labels simples não devem impedir propagação global segura."""
         ir = [
             IRAssign(dest=t(1), src=99),
             IRLabelInstr(lbl("L1")),
             IROp(op="+", dest=t(2), left=t(1), right=0),
         ]
         result = constant_propagation(ir)
-        # t1 NÃO deve ser substituído após o label
-        assert result[2].left == t(1)
+        assert result[2].left == 99
+
+    def test_propaga_constante_global_quando_join_concorda(self):
+        ir = [
+            IRAssign(dest=t(1), src=7),
+            IRCJump(cond=t(9), true_label=lbl("T"), false_label=lbl("F")),
+            IRLabelInstr(lbl("T")),
+            IRJump(lbl("J")),
+            IRLabelInstr(lbl("F")),
+            IRJump(lbl("J")),
+            IRLabelInstr(lbl("J")),
+            IRPrint(args=[t(1)]),
+        ]
+
+        result = constant_propagation(ir)
+        print_instr = next(i for i in result if isinstance(i, IRPrint))
+        assert print_instr.args[0] == 7
+
+    def test_nao_propaga_constante_global_com_join_divergente(self):
+        ir = [
+            IRCJump(cond=t(9), true_label=lbl("T"), false_label=lbl("F")),
+            IRLabelInstr(lbl("T")),
+            IRAssign(dest=t(1), src=1),
+            IRJump(lbl("J")),
+            IRLabelInstr(lbl("F")),
+            IRAssign(dest=t(1), src=2),
+            IRLabelInstr(lbl("J")),
+            IRPrint(args=[t(1)]),
+        ]
+
+        result = constant_propagation(ir)
+        print_instr = next(i for i in result if isinstance(i, IRPrint))
+        assert print_instr.args[0] == t(1)
+
+    def test_propaga_constante_invariante_em_loop(self):
+        ir = [
+            IRAssign(dest=t(1), src=4),
+            IRLabelInstr(lbl("H")),
+            IRCJump(cond=t(9), true_label=lbl("BODY"), false_label=lbl("END")),
+            IRLabelInstr(lbl("BODY")),
+            IRPrint(args=[t(1)]),
+            IRJump(lbl("H")),
+            IRLabelInstr(lbl("END")),
+            IRStop(),
+        ]
+
+        result = constant_propagation(ir)
+        print_instr = next(i for i in result if isinstance(i, IRPrint))
+        assert print_instr.args[0] == 4
 
     def test_clear_env_at_proc_begin(self):
         """IRProcBegin inicia novo escopo — ambiente limpo."""
@@ -203,9 +285,42 @@ class TestConstantPropagation:
         result = constant_propagation(ir)
         assert result[2].left == "N"  # N não é substituído por 5
 
+    def test_propaga_constante_em_indice_de_read_array(self):
+        ir = [
+            IRAssign(dest=t(1), src=2),
+            IRRead(args=[IRArrayRef("A", [t(1)])]),
+        ]
+        result = constant_propagation(ir)
+        read_instr = next(i for i in result if isinstance(i, IRRead))
+        assert read_instr.args[0].indices == [2]
+
 
 # ---------------------------------------------------------------------------
-# 3. Dead Code Elimination
+# 3.5 Copy Propagation
+# ---------------------------------------------------------------------------
+
+class TestCopyPropagation:
+
+    def test_propagate_temp_copy(self):
+        ir = [
+            IRAssign(dest=t(1), src=t(2)),
+            IROp(op="+", dest=t(3), left=t(1), right=1),
+        ]
+        result = copy_propagation(ir)
+        assert result[1].left == t(2)
+
+    def test_clear_copy_env_at_label(self):
+        ir = [
+            IRAssign(dest=t(1), src=t(2)),
+            IRLabelInstr(lbl("L1")),
+            IROp(op="+", dest=t(3), left=t(1), right=1),
+        ]
+        result = copy_propagation(ir)
+        assert result[2].left == t(1)
+
+
+# ---------------------------------------------------------------------------
+# 4. Dead Code Elimination
 # ---------------------------------------------------------------------------
 
 class TestDeadCodeElimination:
@@ -271,9 +386,149 @@ class TestDeadCodeElimination:
         assert "IRProcBegin" in types
         assert "IRProcEnd" in types
 
+    def test_remove_bloco_labelado_inalcancavel(self):
+        ir = [
+            IRJump(lbl("L2")),
+            IRLabelInstr(lbl("L1")),
+            IRPrint(args=[1]),
+            IRLabelInstr(lbl("L2")),
+            IRStop(),
+        ]
+        result = dead_code_elimination(ir)
+        assert all(not (isinstance(i, IRLabelInstr) and i.label == lbl("L1")) for i in result)
+        assert all(not (isinstance(i, IRPrint) and i.args == [1]) for i in result)
+
 
 # ---------------------------------------------------------------------------
-# 4. Pipeline optimize() completo
+# 5. Common Subexpression Elimination (CSE)
+# ---------------------------------------------------------------------------
+
+class TestCommonSubexpressionElimination:
+
+    def test_eliminate_repeated_binop(self):
+        ir = [
+            IROp(op="+", dest=t(1), left=t(2), right=3),
+            IROp(op="+", dest=t(3), left=t(2), right=3),
+        ]
+        result = common_subexpression_elimination(ir)
+        assert isinstance(result[1], IRAssign)
+        assert result[1].src == t(1)
+
+    def test_commutative_binop_cse(self):
+        ir = [
+            IROp(op="*", dest=t(1), left=t(2), right=3),
+            IROp(op="*", dest=t(3), left=3, right=t(2)),
+        ]
+        result = common_subexpression_elimination(ir)
+        assert isinstance(result[1], IRAssign)
+        assert result[1].src == t(1)
+
+    def test_cse_does_not_cross_labels(self):
+        ir = [
+            IROp(op="+", dest=t(1), left=t(2), right=3),
+            IRLabelInstr(lbl("L1")),
+            IROp(op="+", dest=t(3), left=t(2), right=3),
+        ]
+        result = common_subexpression_elimination(ir)
+        assert isinstance(result[2], IROp)
+
+
+# ---------------------------------------------------------------------------
+# 6. Dead Store Elimination
+# ---------------------------------------------------------------------------
+
+class TestDeadStoreElimination:
+
+    def test_remove_overwritten_temp(self):
+        ir = [
+            IRAssign(dest=t(1), src=1),
+            IRAssign(dest=t(1), src=2),
+            IRPrint(args=[t(1)]),
+        ]
+        result = dead_store_elimination(ir)
+        assigns = [i for i in result if isinstance(i, IRAssign)]
+        assert len(assigns) == 1
+        assert assigns[0].src == 2
+
+    def test_remove_unused_temp(self):
+        ir = [
+            IRAssign(dest=t(1), src=1),
+            IRStop(),
+        ]
+        result = dead_store_elimination(ir)
+        assert all(not (isinstance(i, IRAssign) and i.dest == t(1)) for i in result)
+
+    def test_remove_unused_load_array_temp(self):
+        ir = [
+            IRLoadArray(dest=t(1), name="A", indices=[1]),
+            IRStop(),
+        ]
+        result = dead_store_elimination(ir)
+        assert all(not (isinstance(i, IRLoadArray) and i.dest == t(1)) for i in result)
+
+    def test_liveness_global_mantem_temp_usado_noutro_bloco(self):
+        ir = [
+            IRAssign(dest=t(1), src=5),
+            IRJump(lbl("L1")),
+            IRLabelInstr(lbl("L1")),
+            IRPrint(args=[t(1)]),
+        ]
+        result = dead_store_elimination(ir)
+        assert any(isinstance(i, IRAssign) and i.dest == t(1) for i in result)
+
+    def test_liveness_trata_call_com_dest_como_definicao_com_efeito(self):
+        ir = [
+            IRAssign(dest=t(1), src=1),
+            IRCall(name="F", args=[], dest=t(1)),
+            IRPrint(args=[t(1)]),
+        ]
+        result = dead_store_elimination(ir)
+        assert not any(isinstance(i, IRAssign) and i.dest == t(1) for i in result)
+        assert any(isinstance(i, IRCall) and i.dest == t(1) for i in result)
+
+
+# ---------------------------------------------------------------------------
+# 7. Jump Simplification
+# ---------------------------------------------------------------------------
+
+class TestJumpSimplification:
+
+    def test_remove_jump_to_next_label(self):
+        ir = [
+            IRJump(lbl("L1")),
+            IRLabelInstr(lbl("L1")),
+        ]
+        result = jump_simplification(ir)
+        assert len(result) == 1
+        assert isinstance(result[0], IRLabelInstr)
+
+    def test_cjump_constant_false(self):
+        ir = [
+            IRCJump(cond=0, true_label=lbl("T"), false_label=lbl("F")),
+        ]
+        result = jump_simplification(ir)
+        assert isinstance(result[0], IRJump)
+        assert result[0].label == lbl("F")
+
+    def test_cjump_constant_true(self):
+        ir = [
+            IRCJump(cond=1, true_label=lbl("T"), false_label=lbl("F")),
+        ]
+        result = jump_simplification(ir)
+        assert isinstance(result[0], IRJump)
+        assert result[0].label == lbl("T")
+
+    def test_cjump_same_labels(self):
+        ir = [
+            IRCJump(cond=t(1), true_label=lbl("L"), false_label=lbl("L")),
+        ]
+        result = jump_simplification(ir)
+        assert isinstance(result[0], IRJump)
+        assert result[0].label == lbl("L")
+
+
+# ---------------------------------------------------------------------------
+# 8. Pipeline optimize() completo
 # ---------------------------------------------------------------------------
 
 class TestOptimizePipeline:

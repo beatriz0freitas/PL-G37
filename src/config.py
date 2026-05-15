@@ -19,10 +19,15 @@ class Config:
     # Modo debug: imprime tokens, AST, IR ao longo do pipeline
     debug: bool = False
 
+    # Fortran 77: tipagem implícita (I-N -> INTEGER, restante -> REAL)
+    # Pode ser desativada pelo IMPLICIT NONE no código fonte.
+    implicit_typing: bool = False
+
     # Ficheiro de entrada 
     input_file: str = ""
 
     def validate(self):
+        """Valida valores de configuração antes de iniciar o pipeline."""
         if self.source_format not in ("fixed", "free", "auto"):
             raise ValueError(f"source_format inválido: {self.source_format!r}")
 

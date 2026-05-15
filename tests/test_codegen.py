@@ -87,6 +87,26 @@ class TestCodegenFatorial:
         assert lines[4] == "PUSHI 1"
 
 
+class TestCodegenDoLoops:
+
+    def test_do_com_step_negativo_usa_teste_decrescente(self, parser):
+        src = """PROGRAM P
+                 INTEGER I, S
+                 S = 0
+                 DO 10 I = 5, 1, -1
+                 S = S + I
+10               CONTINUE
+                 PRINT *, S
+                 END
+              """
+        code = gen_optimized_code(parse_str(parser, src, filename="do_negativo.f"))
+
+        assert "JUMP DONEG" in code
+        assert "DOPOS" not in code
+        assert "SUPEQ" in code
+        assert "PUSHI -1\nADD" in code
+
+
 class TestCodegenPrimo:
 
     def test_primo_usa_logica_mod_e_saltos_condicionais(self, parser):
@@ -206,6 +226,21 @@ class TestCodegenPower:
         assert "SUP" in code
         assert "MUL" in code
         assert "NotImplementedError" not in code
+
+    def test_power_com_expoente_zero_preserva_resultado_um(self, parser):
+        src = """PROGRAM P
+                 INTEGER X
+                 X = 2 ** 0
+                 PRINT *, X
+                 END
+              """
+        code = gen_code(parse_str(parser, src, filename="pow_zero.f"))
+
+        assert "POWTEST" in code
+        assert "POWEND" in code
+        assert "PUSHI 1\nSTOREG" in code
+        assert "PUSHI 0\nSUP\nJZ POWEND" in code
+        assert "WRITEI" in code
 
 
 class TestCodegenVmCompatibility:

@@ -5,6 +5,7 @@ Hierarquia:
   ├── Program           — PROGRAM nome ... END
   ├── Decl              — declarações de tipo
   │   └── TypeDecl      — INTEGER/REAL/LOGICAL/CHARACTER varlist
+    │   └── ImplicitNone  — IMPLICIT NONE
   └── Stmt              — instruções
       ├── AssignStmt    — var = expr
       ├── IfStmt        — IF (cond) THEN ... [ELSE ...] ENDIF
@@ -78,6 +79,12 @@ class TypeDecl(Node):
     """INTEGER / REAL / LOGICAL / CHARACTER varlist"""
     typename: str       # "INTEGER", "REAL", "LOGICAL", "CHARACTER"
     variables: list     # list[str | ArrayDecl]
+    lineno: int = 0
+
+
+@dataclass
+class ImplicitNone(Node):
+    """IMPLICIT NONE"""
     lineno: int = 0
 
 
