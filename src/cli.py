@@ -15,6 +15,7 @@ from pathlib import Path
 
 from src.config import config
 from src.errors import CompileError, ParseError
+from src.codegen.peephole import peephole_optimize
 
 
 def parse_args():
@@ -260,7 +261,9 @@ def run_codegen(source: str, filename: str, source_format: str, debug: bool):
 
     from src.codegen.ewvm import EWVMGenerator
     backend = EWVMGenerator.from_program(tree)
+    
     code = backend.generate(optimized)
+    code = peephole_optimize(code)
     print(code)
     return code
 
