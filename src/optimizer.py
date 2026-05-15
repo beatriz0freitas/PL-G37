@@ -283,8 +283,11 @@ def copy_propagation(instructions: list[IRInstr]) -> list[IRInstr]:
             seen.add(key)
             mapped = env[key]
             if isinstance(mapped, Temp):
-                key = str(mapped)
-                continue
+                next_key = str(mapped)
+                if next_key in env:
+                    key = next_key
+                    continue
+                return mapped
             return mapped
         return v
 
@@ -644,7 +647,7 @@ def optimize(instructions: list[IRInstr]) -> list[IRInstr]:
 
         Ordem:
             propagação → folding → copy → CSE → propagação → folding → copy
-            → dead-store → jump-simplify → DCE
+            → propagação → dead-store → jump-simplify → DCE
         """
         instructions = constant_propagation(instructions)
         instructions = constant_folding(instructions)
@@ -653,6 +656,7 @@ def optimize(instructions: list[IRInstr]) -> list[IRInstr]:
         instructions = constant_propagation(instructions)
         instructions = constant_folding(instructions)
         instructions = copy_propagation(instructions)
+        instructions = constant_propagation(instructions)
         instructions = dead_store_elimination(instructions)
         instructions = jump_simplification(instructions)
         instructions = dead_code_elimination(instructions)

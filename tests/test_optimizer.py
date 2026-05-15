@@ -10,9 +10,13 @@ Cobre:
 import pytest
 
 from src.optimizer import (
+    common_subexpression_elimination,
     constant_folding,
     constant_propagation,
+    copy_propagation,
     dead_code_elimination,
+    dead_store_elimination,
+    jump_simplification,
     optimize,
 )
 from src.representacao_intermedia.instrucoes import (
@@ -20,6 +24,7 @@ from src.representacao_intermedia.instrucoes import (
     IRCJump,
     IRJump,
     IRLabelInstr,
+    IRLoadArray,
     IROp,
     IRPrint,
     IRProcBegin,
@@ -205,6 +210,30 @@ class TestConstantPropagation:
 
 
 # ---------------------------------------------------------------------------
+# 2.5 Copy Propagation
+# ---------------------------------------------------------------------------
+
+class TestCopyPropagation:
+
+    def test_propagate_temp_copy(self):
+        ir = [
+            IRAssign(dest=t(1), src=t(2)),
+            IROp(op="+", dest=t(3), left=t(1), right=1),
+        ]
+        result = copy_propagation(ir)
+        assert result[1].left == t(2)
+
+    def test_clear_copy_env_at_label(self):
+        ir = [
+            IRAssign(dest=t(1), src=t(2)),
+            IRLabelInstr(lbl("L1")),
+            IROp(op="+", dest=t(3), left=t(1), right=1),
+        ]
+        result = copy_propagation(ir)
+        assert result[2].left == t(1)
+
+
+# ---------------------------------------------------------------------------
 # 3. Dead Code Elimination
 # ---------------------------------------------------------------------------
 
@@ -270,6 +299,114 @@ class TestDeadCodeElimination:
         types = [type(i).__name__ for i in result]
         assert "IRProcBegin" in types
         assert "IRProcEnd" in types
+
+
+# ---------------------------------------------------------------------------
+# 4. Common Subexpression Elimination (CSE)
+# ---------------------------------------------------------------------------
+
+class TestCommonSubexpressionElimination:
+
+    def test_eliminate_repeated_binop(self):
+        ir = [
+            IROp(op="+", dest=t(1), left=t(2), right=3),
+            IROp(op="+", dest=t(3), left=t(2), right=3),
+        ]
+        result = common_subexpression_elimination(ir)
+        assert isinstance(result[1], IRAssign)
+        assert result[1].src == t(1)
+
+    def test_commutative_binop_cse(self):
+        ir = [
+            IROp(op="*", dest=t(1), left=t(2), right=3),
+            IROp(op="*", dest=t(3), left=3, right=t(2)),
+        ]
+        result = common_subexpression_elimination(ir)
+        assert isinstance(result[1], IRAssign)
+        assert result[1].src == t(1)
+
+    def test_cse_does_not_cross_labels(self):
+        ir = [
+            IROp(op="+", dest=t(1), left=t(2), right=3),
+            IRLabelInstr(lbl("L1")),
+            IROp(op="+", dest=t(3), left=t(2), right=3),
+        ]
+        result = common_subexpression_elimination(ir)
+        assert isinstance(result[2], IROp)
+
+
+# ---------------------------------------------------------------------------
+# 5. Dead Store Elimination
+# ---------------------------------------------------------------------------
+
+class TestDeadStoreElimination:
+
+    def test_remove_overwritten_temp(self):
+        ir = [
+            IRAssign(dest=t(1), src=1),
+            IRAssign(dest=t(1), src=2),
+            IRPrint(args=[t(1)]),
+        ]
+        result = dead_store_elimination(ir)
+        assigns = [i for i in result if isinstance(i, IRAssign)]
+        assert len(assigns) == 1
+        assert assigns[0].src == 2
+
+    def test_remove_unused_temp(self):
+        ir = [
+            IRAssign(dest=t(1), src=1),
+            IRStop(),
+        ]
+        result = dead_store_elimination(ir)
+        assert all(not (isinstance(i, IRAssign) and i.dest == t(1)) for i in result)
+
+    def test_remove_unused_load_array_temp(self):
+        ir = [
+            IRLoadArray(dest=t(1), name="A", indices=[1]),
+            IRStop(),
+        ]
+        result = dead_store_elimination(ir)
+        assert all(not (isinstance(i, IRLoadArray) and i.dest == t(1)) for i in result)
+
+
+# ---------------------------------------------------------------------------
+# 6. Jump Simplification
+# ---------------------------------------------------------------------------
+
+class TestJumpSimplification:
+
+    def test_remove_jump_to_next_label(self):
+        ir = [
+            IRJump(lbl("L1")),
+            IRLabelInstr(lbl("L1")),
+        ]
+        result = jump_simplification(ir)
+        assert len(result) == 1
+        assert isinstance(result[0], IRLabelInstr)
+
+    def test_cjump_constant_false(self):
+        ir = [
+            IRCJump(cond=0, true_label=lbl("T"), false_label=lbl("F")),
+        ]
+        result = jump_simplification(ir)
+        assert isinstance(result[0], IRJump)
+        assert result[0].label == lbl("F")
+
+    def test_cjump_constant_true(self):
+        ir = [
+            IRCJump(cond=1, true_label=lbl("T"), false_label=lbl("F")),
+        ]
+        result = jump_simplification(ir)
+        assert isinstance(result[0], IRJump)
+        assert result[0].label == lbl("T")
+
+    def test_cjump_same_labels(self):
+        ir = [
+            IRCJump(cond=t(1), true_label=lbl("L"), false_label=lbl("L")),
+        ]
+        result = jump_simplification(ir)
+        assert isinstance(result[0], IRJump)
+        assert result[0].label == lbl("L")
 
 
 # ---------------------------------------------------------------------------
