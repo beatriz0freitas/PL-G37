@@ -7,6 +7,7 @@ Padrões suportados (janela de 2 linhas):
   - Identidades aritméticas: x+0, x-0, x*1, x/1  (inteiros e reais)
   - Conversões redundantes:  ITOF;FTOI  e  FTOI;ITOF
   - Salto redundante:        JUMP X  quando X: é a linha imediatamente seguinte
+  - Labels não referenciadas por saltos ou PUSHA
 """
 
 from __future__ import annotations
@@ -50,6 +51,32 @@ def _label_name(line: str) -> str | None:
     if s.endswith(":") and " " not in s and len(s) > 1:
         return s[:-1]
     return None
+
+
+def _referenced_labels(lines: list[str]) -> set[str]:
+    """Recolhe labels usadas por instruções que precisam de resolver nomes."""
+    refs: set[str] = set()
+    for raw in lines:
+        parts = raw.strip().split()
+        if len(parts) == 2 and parts[0] in {"JUMP", "JZ", "PUSHA"}:
+            refs.add(parts[1])
+    return refs
+
+
+def _remove_unreferenced_labels(lines: list[str]) -> tuple[list[str], bool]:
+    """Remove labels que só serviam como fallthrough e já não são alvo de nada."""
+    refs = _referenced_labels(lines)
+    result: list[str] = []
+    changed = False
+
+    for line in lines:
+        label = _label_name(line)
+        if label is not None and label not in refs:
+            changed = True
+            continue
+        result.append(line)
+
+    return result, changed
 
 
 # ---------------------------------------------------------------------------
@@ -104,4 +131,5 @@ def peephole_optimize(code: str) -> str:
     changed = True
     while changed:
         lines, changed = _apply_pass(lines)
+    lines, _ = _remove_unreferenced_labels(lines)
     return "\n".join(lines)

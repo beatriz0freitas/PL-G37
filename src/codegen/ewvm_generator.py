@@ -425,7 +425,8 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
                     self._push_value(arg)
                 else:
                     self._push_value_for_type(arg, param_type)
-            self.emit("PUSHI", 0)
+            if info.kind == "function":
+                self.emit("PUSHI", 0)
             self.emit("PUSHA", upper)
             self.emit("CALL")
 
@@ -434,7 +435,10 @@ class EWVMGenerator(TypeInferenceMixin, IntrinsicsCodegenMixin, StackEmitterMixi
             if upper in self.subprograms and args:
                 self.emit("POP", len(args))
         elif upper in self.subprograms:
-            self.emit("POP", len(args) + 1)
+            info = self.subprograms[upper]
+            cleanup_count = len(args) + (1 if info.kind == "function" else 0)
+            if cleanup_count:
+                self.emit("POP", cleanup_count)
 
     def _translate_proc_begin(self, name: str) -> None:
         """Emite prólogo de função/subrotina e aloca arrays locais."""
