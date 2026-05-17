@@ -209,13 +209,13 @@ python -m src --stage opt --format fixed tests/fixtures/continuation.f
 
 Uso típico:
 
-- confirmar constant folding e constant propagation;
-- observar eliminação de código morto após `GOTO`, `STOP` ou `RETURN`;
+- confirmar propagação de constantes, *constant folding* e propagação de cópias;
+- observar eliminação de subexpressões comuns, *dead stores* e código morto após `GOTO`, `STOP` ou `RETURN`;
 - comparar IR bruta (`--stage ir`) com IR otimizada (`--stage opt`).
 
 ##### 6) Geração de código EWVM (`--stage codegen`)
 
-Executa lexer + parser + análise semântica + gerador de IR + backend EWVM e imprime o código alvo.
+Executa lexer + parser + análise semântica + gerador de IR + backend EWVM e imprime o código alvo, aplicando no fim uma passagem peephole sobre o texto EWVM.
 
 Exemplo:
 
@@ -227,7 +227,7 @@ Uso típico:
 
 - verificar a tradução final de `PRINT`, `READ`, `IF`, `DO` e `GOTO`;
 - confirmar alocação global (`PUSHI`, `ALLOC`) e acessos a memória (`PUSHG`, `STOREG`, `LOAD`, `STORE`);
-- preparar validação end-to-end na VM fornecida pelo docente.
+- preparar validação end-to-end na VM fornecida pelo docente e observar simplificações de peephole no código final.
 
 ##### 7) Formato de fonte (`--format`)
 
@@ -254,7 +254,6 @@ Executar todos os testes:
 
 ```bash
 make test
-
 ```
 
 Testes por componente:
@@ -276,12 +275,13 @@ python -m pytest tests/test_lexer.py
 python -m pytest tests/test_parser_smoke.py
 python -m pytest tests/test_ir.py
 python -m pytest tests/test_codegen.py
+python -m pytest tests/test_optimizer.py
+python -m pytest tests/test_peephole.py
 ```
 
-### Validação manual na EWVM do docente
+#### Validação manual na EWVM do docente
 
-Como a EWVM fornecida está disponível através de uma interface web, a validação
-end-to-end é manual.
+Como a EWVM fornecida está disponível através de uma interface web, a validação end-to-end é manual.
 
 Exemplo:
 
