@@ -1,14 +1,14 @@
 # Compilador Fortran 77 para EWVM
 
-**Processamento de Linguagens - G37**
-Ana Beatriz Freitas (a106853) | Luis Miguel Coelho (a106843) | Matilde Teixeira
+**Processamento de Linguagens - G37**  
+Ana Beatriz Freitas (a106853) | Luis Miguel Coelho (a106843) | Matilde Teixeira(a106876)  
 **Ano letivo:** 2026
 
 ---
 
 ## 1\. Introdução
 
-O presente relatório descreve o trabalho desenvolvido no âmbito da unidade curricular de Processamento de Linguagens. O objetivo deste projeto foi o desenvolvimento de um compilador para um subconjunto prático de Fortran 77 *standard*, alinhado com os requisitos do enunciado, capaz de reconhecer os programas e construções suportados, validar a sua estrutura sintática e coerência semântica, e traduzir o código fonte para instruções executáveis na máquina virtual EWVM disponibilizada na unidade curricular.
+O presente relatório descreve o trabalho desenvolvido no âmbito da unidade curricular de Processamento de Linguagens. O objetivo deste projeto foi o desenvolvimento de um compilador para um subconjunto prático de Fortran 77 *standard*, alinhado com os requisitos do enunciado, capaz de reconhecer os programas e as construções suportadas, validar a sua estrutura sintática e coerência semântica, e traduzir o código fonte para instruções executáveis na máquina virtual EWVM disponibilizada na unidade curricular.
 
 A solução foi implementada em Python com recurso às ferramentas `ply.lex` e `ply.yacc`, seguindo uma arquitetura modular inspirada nas fases clássicas de compilação. O projeto encontra-se organizado em componentes independentes, responsáveis pelas diferentes etapas do processo de compilação, o que facilita a manutenção, os testes e a extensão futura do compilador.
 
@@ -16,9 +16,13 @@ Foram também implementadas funcionalidades de valorização, incluindo criaçã
 
 ---
 
-## 2. Arquitetura Geral
+## 2\. Arquitetura Geral
 
-O projeto foi organizado por fases independentes numa *pipeline* clássica de compilação, explicitando a passagem por IR antes da geração de código. Cada fase recebe uma estrutura bem definida e produz a estrutura consumida pela fase seguinte, o que facilita testes isolados, simplifica depuração e evita que a lógica de uma fase se misture com outra.
+O projeto foi organizado por fases independentes numa *pipeline* clássica de compilação, explicitando a passagem por IR antes da geração de código. Cada fase recebe uma estrutura bem definida e produz a estrutura consumida pela fase seguinte, o que facilita testes isolados, simplifica a depuração e evita que a lógica de uma fase se misture com outra.
+
+text
+
+Copy
 
 ```text
 Fortran 77 -> Lexer -> Parser/AST -> Semântica -> IR -> Otimização -> EWVM
@@ -28,7 +32,7 @@ A implementação separa claramente o pré-processamento de formato, o *lexer*, 
 
 ---
 
-## 3. Análise Léxica
+## 3\. Análise Léxica
 
 A análise léxica foi implementada com `ply.lex`. Antes do *lexer*, existe uma fase de pré-processamento em `processor.py`, uma vez que o Fortran 77 tem regras de formato que não são convenientes de tratar diretamente com expressões regulares do *lexer*.
 
@@ -36,7 +40,7 @@ No modo *fixed-form*, o pré-processador interpreta a coluna 1 como possível co
 
 No modo *free-form*, são suportados comentários com `!` e continuação com `&`. Quando o formato é `auto`, a deteção heurística ignora ocorrências de `!` e `&` dentro de *strings* e comentários para reduzir falsos positivos, privilegiando padrões típicos de *fixed-form* (*labels* em colunas 1–5 e continuação na coluna 6) antes de concluir por *free-form*.
 
-O *lexer* reconhece palavras-chave (`PROGRAM`, `INTEGER`, `REAL`, `IF`, `DO`, `GOTO`, etc.), identificadores, inteiros, reais, lógicos, strings, operadores aritméticos, operadores relacionais pontuados (`.EQ.`, `.LE.`, etc.), operadores lógicos (`.AND.`, `.OR.`, `.NOT.`) e pontuação. Como Fortran é *case-insensitive*, identificadores e palavras-chave são normalizados para maiúsculas.
+O *lexer* reconhece palavras-chave (`PROGRAM`, `INTEGER`, `REAL`, `IF`, `DO`, `GOTO`, etc.), identificadores, inteiros, reais, lógicos, strings, operadores aritméticos, operadores relacionais pontuados (`.EQ.`, `.LE.`, etc.), operadores lógicos (`.AND.`, `.OR.`, `.NOT.`) e pontuação. Como o Fortran é *case-insensitive*, os identificadores e as palavras-chave são normalizados para maiúsculas.
 
 Optamos por tratar os *labels* no pré-processamento e inseri-los como *tokens* próprios. Isto simplifica o *parser* e preserva a informação necessária para `GOTO` e `DO`.
 
@@ -44,7 +48,7 @@ Outra decisão foi tokenizar previamente a lista de *tokens* antes de iniciar o 
 
 ---
 
-## 4. Análise Sintática e AST
+## 4\. Análise Sintática e AST
 
 A análise sintática foi implementada com `ply.yacc`, usando uma gramática LALR(1). Esta escolha é adequada para expressões com precedência e associatividade, e evita reescrever a gramática em estilo recursivo descendente manual.
 
@@ -60,25 +64,16 @@ Para suportar *labels* numéricos, qualquer instrução pode receber um *label* 
 
 ---
 
-## 5. Gramática Utilizada
+## 5\. Gramática Utilizada
 
 A gramática implementada cobre o subconjunto de Fortran 77 definido no enunciado, organizada em quatro módulos de produção PLY. A forma resumida é:
 
+text
+
+Copy
+
 ```
-program        -> PROGRAM ID body END subprogram_list
-body           -> decl_list stmt_list
-decl           -> type_spec var_decl_list | IMPLICIT NONE
-type_spec      -> INTEGER | REAL | LOGICAL | CHARACTER | DOUBLE PRECISION
-stmt           -> LABEL unlabeled_stmt | unlabeled_stmt
-unlabeled_stmt -> assign | if_stmt | do_stmt | goto | continue |
-                  print | read | write | call | stop | return
-if_stmt        -> IF (expr) THEN stmt_list elseif_chain ENDIF
-               | IF (expr) INT_LIT , INT_LIT , INT_LIT
-elseif_chain   -> ELSEIF (expr) THEN stmt_list elseif_chain | ELSE stmt_list | ε
-do_stmt        -> DO INT_LIT ID = expr , expr [, expr]
-expr           -> expr op expr | op expr | (expr) | literal | ID | ID(arg_list)
-subprogram     -> type_spec FUNCTION ID (params) body END
-               | SUBROUTINE ID [(params)] body END
+program        -> PROGRAM ID body END subprogram_listbody           -> decl_list stmt_listdecl           -> type_spec var_decl_list | IMPLICIT NONEtype_spec      -> INTEGER | REAL | LOGICAL | CHARACTER | DOUBLE PRECISIONstmt           -> LABEL unlabeled_stmt | unlabeled_stmtunlabeled_stmt -> assign | if_stmt | do_stmt | goto | continue |                  print | read | write | call | stop | returnif_stmt        -> IF (expr) THEN stmt_list elseif_chain ENDIF               | IF (expr) INT_LIT , INT_LIT , INT_LITelseif_chain   -> ELSEIF (expr) THEN stmt_list elseif_chain | ELSE stmt_list | εdo_stmt        -> DO INT_LIT ID = expr , expr [, expr]expr           -> expr op expr | op expr | (expr) | literal | ID | ID(arg_list)subprogram     -> type_spec FUNCTION ID (params) body END               | SUBROUTINE ID [(params)] body END
 ```
 
 De destacar que qualquer instrução pode ter um `LABEL` prefixado, não apenas `CONTINUE`, ficando esse valor guardado como atributo `source_label` no nó AST para resolução correcta de `GOTO` e `DO` nas fases seguintes. Também a forma `ID(args)` é sempre produzida como `CallExpr` pelo parser logo a distinção entre acesso a *array* e chamada de função é resolvida pela análise semântica consultando a tabela de símbolos.
@@ -87,7 +82,7 @@ A tabela de precedências segue a ordem esperada para Fortran, isto é, equival�
 
 ---
 
-## 6. Análise Semântica
+## 6\. Análise Semântica
 
 A análise semântica percorre a AST, constrói tabelas de símbolos e anota nós com informação de tipo. Existe uma tabela para o programa principal e uma tabela própria para cada subprograma.
 
@@ -99,20 +94,21 @@ Os expoentes negativos literais, expoentes reais e potências reais são rejeita
 
 ---
 
-## 7. Representação Intermédia
+## 7\. Representação Intermédia
 
 A IR adoptada é de estilo *Three-Address Code*, ou seja, cada instrução tem no máximo um operador e três operandos. Esta escolha em vez de gerar EWVM directamente da AST isola a semântica do *backend*, simplifica o teste por fases e permite aplicar otimizações antes da emissão final.
 
 Exemplos de instruções IR:
 
+text
+
+Copy
+
 ```text
-t1 = A + B
-IF t1 GOTO THEN1 ELSE GOTO ENDIF1
-GOTO L10
-PRINT X, "texto"
+t1 = A + BIF t1 GOTO THEN1 ELSE GOTO ENDIF1GOTO L10PRINT X, "texto"
 ```
 
-O gerador de IR usa uma abordagem de *visitor*: cada nó relevante da AST tem um método de tradução próprio. O gerador cobre atribuições, *arrays*, expressões, `IF`, `IF` aritmético, `DO`, `GOTO`, I/O, chamadas e subprogramas.
+O gerador de IR usa uma abordagem de *visitor,* cada nó relevante da AST tem um método de tradução próprio. O gerador cobre atribuições, *arrays*, expressões, `IF`, `IF` aritmético, `DO`, `GOTO`, I/O, chamadas e subprogramas.
 
 A opção por um *visitor* com despacho dinâmico mantém o gerador extensível e evita cadeias longas de `isinstance`, o que simplifica a evolução do compilador sem alterar a estrutura das fases anteriores.
 
@@ -124,7 +120,7 @@ Outra decisão relevante foi preservar *labels* ao longo das fases intermédias 
 
 ---
 
-## 8. Otimização
+## 8\. Otimização
 
 A fase de otimização atua sobre a representação intermédia (IR), antes da geração de código EWVM. Esta posição no *pipeline* é intencional uma vez que a IR em três endereços é uma estrutura uniforme e independente do alvo, o que torna as transformações mais simples de implementar, testar e raciocinar do que se fossem feitas diretamente sobre a AST ou sobre o texto EWVM.
 
@@ -138,11 +134,12 @@ Avalia em tempo de compilação operações binárias (`IROp`) e unárias (`IRUn
 
 Exemplos de transformações:
 
+text
+
+Copy
+
 ```text
-t1 = 3 + 4      →   t1 = 7
-t2 = 10 / 2     →   t2 = 5
-t3 = .NOT. 0    →   t3 = 1
-t4 = 2 < 5      →   t4 = 1
+t1 = 3 + 4      →   t1 = 7t2 = 10 / 2     →   t2 = 5t3 = .NOT. 0    →   t3 = 1t4 = 2 < 5      →   t4 = 1
 ```
 
 A divisão por zero não é avaliada estaticamente logo a instrução original é preservada para que o erro ocorra em *runtime*, tal como o *standard* exige.
@@ -151,9 +148,12 @@ A divisão por zero não é avaliada estaticamente logo a instrução original �
 
 Propaga literais atribuídos a temporários para os seus usos subsequentes, substituindo referências a `tN` pelo valor literal. A análise é feita por *data-flow* sobre a CFG (*Control Flow Graph*), usando uma função de transferência por bloco e uma operação de *meet* (interseção) nos pontos de junção.
 
+text
+
+Copy
+
 ```text
-t1 = 42
-t2 = t1 + 1     →   t2 = 42 + 1
+t1 = 42t2 = t1 + 1     →   t2 = 42 + 1
 ```
 
 A propagação é conservadora em relação a variáveis de utilizador (identificadores nomeados como `X`, `N`, etc.) logo estas não são substituídas por literais mesmo quando o valor é conhecido, para preservar a informação de tipo necessária ao backend EWVM, por exemplo, distinguir `PUSHG` de `STOREG` entre uma variável `REAL` e uma `INTEGER`.
@@ -164,18 +164,24 @@ Adicionalmente, o ambiente de constantes é limpo nos pontos de `IRProcBegin` (i
 
 Propaga cópias diretas entre temporários, substituindo usos de `tN` por `tM` quando existe uma atribuição `tN = tM` ativa. Percorre linearmente os blocos e invalida o ambiente nos limites de bloco (labels, início/fim de subprogramas).
 
+text
+
+Copy
+
 ```text
-t2 = t1
-t3 = t2 + 1     →   t3 = t1 + 1
+t2 = t1t3 = t2 + 1     →   t3 = t1 + 1
 ```
 
 ##### D) *Common Subexpression Elimination* - CSE
 
 Dentro de cada bloco básico, deteta operações binárias e unárias com os mesmos operandos que já foram calculadas anteriormente. Quando encontra uma repetição, substitui a instrução redundante por uma cópia do temporário que já contém o resultado.
 
+text
+
+Copy
+
 ```text
-t1 = A + B
-t2 = A + B      →   t2 = t1
+t1 = A + Bt2 = A + B      →   t2 = t1
 ```
 
 Operadores comutativos (`+`, `*`, `==`, `AND`, etc.) são normalizados antes de comparar, pelo que `A + B` e `B + A` são reconhecidos como a mesma expressão. O mapa de expressões conhecidas é invalidado nos limites de bloco (*labels*) e quando um temporário é redefinido.
@@ -184,21 +190,23 @@ Operadores comutativos (`+`, `*`, `==`, `AND`, etc.) são normalizados antes de 
 
 Remove atribuições a temporários cujo valor nunca é lido. A análise usa liveness global sobre a CFG, isto é, para cada bloco calcula-se o conjunto de temporários vivos à saída, `live-out`, usando a equação clássica de *backwards* *data-flow*. Uma definição é eliminada se o temporário definido não está vivo após essa instrução.
 
+text
+
+Copy
+
 ```text
-t1 = 1        ← eliminado (t1 nunca é lido)
-t2 = X + Y
-PRINT t2
+t1 = 1        ← eliminado (t1 nunca é lido)t2 = X + YPRINT t2
 ```
 
 Apenas instruções sem efeitos colaterais (`IRAssign`, `IROp`, `IRUnaryOp`, `IRLoadArray`) são candidatas à eliminação. Chamadas (`IRCall`) e operações de I/O nunca são removidas, mesmo que o destino não seja usado.
 
-##### F) *Jump Simplification* 
+##### F) *Jump Simplification*
 
 Simplifica padrões redundantes de saltos antes da eliminação de código morto:
 
-* **JUMP para o label seguinte:** `JUMP L1` imediatamente antes de `L1:` é removido.
-* ***Conditional jump* com constante:** `IF 0 GOTO T ELSE F` converte-se em `GOTO F`; analogamente para condição verdadeira.
-* ***Conditional jump* com ambos os ramos iguais:** `IF cond GOTO L ELSE L` converte-se em `GOTO L`.
+-   **JUMP para o label seguinte:** `JUMP L1` imediatamente antes de `L1:` é removido.
+-   ***Conditional jump* com constante:** `IF 0 GOTO T ELSE F` converte-se em `GOTO F`; analogamente para condição verdadeira.
+-   ***Conditional jump* com ambos os ramos iguais:** `IF cond GOTO L ELSE L` converte-se em `GOTO L`.
 
 ##### G) *Dead Code Elimination* - DCE
 
@@ -208,18 +216,12 @@ Remove blocos básicos inalcançáveis calculando os blocos alcançáveis a part
 
 Os passes são aplicados em sequência fixa pelo `optimizer.py`:
 
+text
+
+Copy
+
 ```text
-constant_propagation
-    → constant_folding
-        → copy_propagation
-            → common_subexpression_elimination
-                → constant_propagation
-                    → constant_folding
-                        → copy_propagation
-                            → constant_propagation
-                                → dead_store_elimination
-                                    → jump_simplification
-                                        → dead_code_elimination
+constant_propagation    → constant_folding        → copy_propagation            → common_subexpression_elimination                → constant_propagation                    → constant_folding                        → copy_propagation                            → constant_propagation                                → dead_store_elimination                                    → jump_simplification                                        → dead_code_elimination
 ```
 
 A ordem não é arbitrária. *Constant propagation* e *folding* são alternados porque cada passe pode criar novas oportunidades para o outro, isto é, a propagação substitui temporários por literais, e o *folding* colapsa operações com literais em novas atribuições que, por sua vez, podem ser propagadas novamente. A *copy propagation* encurta cadeias de cópias antes de novas passagens. O *dead store elimination* e o *jump simplification* preparam a IR para o DCE final, que descarta os blocos entretanto tornados inalcançáveis.
@@ -230,7 +232,7 @@ Além do relatório, o projeto inclui *docstrings Python* nas classes e funçõe
 
 ---
 
-## 9. Geração de Código EWVM
+## 9\. Geração de Código EWVM
 
 O *backend* traduz a IR para instruções da EWVM. A memória global é reservada antes de `START` com valores iniciais, e variáveis globais são acedidas com `PUSHG` e `STOREG`. Os *arrays* são alocados com `ALLOC`, guardados como ponteiros e acedidos com `PADD`, `LOAD` e `STORE`.
 
@@ -246,7 +248,7 @@ No *backend*, evitou-se introduzir pseudo-instruções inexistentes na EWVM, tra
 
 ---
 
-## 10. Dificuldades
+## 10\. Dificuldades
 
 Uma das dificuldades a destacar foi o formato histórico de Fortran 77. O tratamento de colunas, labels e continuações podia tornar o *lexer* difícil de manter. A solução foi criar um pré-processador separado, deixando o *lexer* responsável apenas por reconhecer *tokens*.
 
@@ -256,19 +258,23 @@ Outra dificuldade foi a ambiguidade de `ID(...)`. Em Fortran, a mesma forma pode
 
 ---
 
-## 11. Testes e Validação
+## 11\. Testes e Validação
 
 A validação é feita com `pytest`, cobrindo cada fase e casos de integração. Existem *fixtures* Fortran em `tests/fixtures/` e ficheiros EWVM esperados em `tests/expected_vm/`.
 
-Atualmente a suíte inclui 263 testes distribuídos por léxico (103), sintático (26), semântico (16), IR (11), geração EWVM (23), CLI (9), otimização de IR (49) e *peephole* (26). A geração EWVM é validada por comparação textual com saídas esperadas e por testes específicos para *arrays*, intrínsecas, subprogramas, conversões, potência inteira e compatibilidade com instruções reais da EWVM.
+A geração EWVM é validada por comparação textual com saídas esperadas e por testes específicos para *arrays*, intrínsecas, subprogramas, conversões, potência inteira e compatibilidade com instruções reais da EWVM.
 
 ---
 
-## 12. Instruções de Execução
+## 12\. Instruções de Execução
 
 Requisitos: o projeto assume Python 3.11+, `ply>=3.11`, `pytest` para desenvolvimento/testes e `make` como utilitário recomendado.
 
 Instalação recomendada:
+
+bash
+
+Copy
 
 ```bash
 make setup
@@ -276,17 +282,29 @@ make setup
 
 Gerar um ficheiro `.vm`:
 
+bash
+
+Copy
+
 ```bash
 python3 -m src --stage codegen --format free tests/fixtures/hello.f > hello.vm
 ```
 
 Executar testes:
 
+bash
+
+Copy
+
 ```bash
 make test
 ```
 
 ou:
+
+bash
+
+Copy
 
 ```bash
 python3 -m pytest
@@ -296,7 +314,7 @@ A execução final na EWVM do docente pode ser feita copiando o conteúdo gerado
 
 ---
 
-## 13. Conclusão
+## 13\. Conclusão
 
 O projeto apresenta uma *pipeline* completa de compilação para um subconjunto de Fortran 77. A solução usa PLY, valida semanticamente o programa, gera IR, aplica otimizações e produz código EWVM.
 
