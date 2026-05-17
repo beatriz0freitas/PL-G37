@@ -106,17 +106,17 @@ class TestRedundantJump:
 
     def test_jump_para_proxima_label_removido(self):
         code = "DOTEST1:\nJUMP DOPOS4\nDOPOS4:\nPUSHG 0"
-        assert opt(code) == "DOTEST1:\nDOPOS4:\nPUSHG 0"
+        assert opt(code) == "PUSHG 0"
 
     def test_jump_then_apos_jz_removido(self):
         """Padrão típico de IF-THEN: JZ ENDIF; JUMP THEN; THEN:"""
         code = "JZ ENDIF2\nJUMP THEN1\nTHEN1:\nPUSHG 0"
-        assert opt(code) == "JZ ENDIF2\nTHEN1:\nPUSHG 0"
+        assert opt(code) == "JZ ENDIF2\nPUSHG 0"
 
     def test_jump_dobody_apos_jz_removido(self):
         """Padrão de corpo de DO loop: JZ DOEND; JUMP DOBODY; DOBODY:"""
         code = "JZ DOEND3\nJUMP DOBODY2\nDOBODY2:\nPUSHG 0"
-        assert opt(code) == "JZ DOEND3\nDOBODY2:\nPUSHG 0"
+        assert opt(code) == "JZ DOEND3\nPUSHG 0"
 
     def test_jump_nao_imediato_preservado(self):
         """JUMP para label que não está na próxima linha — preservar."""
@@ -125,7 +125,7 @@ class TestRedundantJump:
 
     def test_jump_para_label_diferente_preservado(self):
         code = "JUMP LABEL_A\nLABEL_B:\nSTOP"
-        assert opt(code) == code
+        assert opt(code) == "JUMP LABEL_A\nSTOP"
 
 
 # ---------------------------------------------------------------------------
@@ -149,8 +149,8 @@ class TestFixedPoint:
         result = opt(code)
         assert "JUMP DOPOS4" not in result
         assert "JUMP DOBODY2" not in result
-        assert "DOPOS4:" in result
-        assert "DOBODY2:" in result
+        assert "DOPOS4:" not in result
+        assert "DOBODY2:" not in result
 
     def test_itof_ftoi_em_cadeia_longa(self):
         """Elimina o par mesmo rodeado de outras instruções."""
@@ -178,7 +178,7 @@ class TestNoFalsePositives:
 
     def test_so_labels(self):
         code = "L1:\nL2:\nL3:"
-        assert opt(code) == code
+        assert opt(code) == ""
 
     def test_jump_loop_back_preservado(self):
         """JUMP de volta ao início do loop não deve ser eliminado."""

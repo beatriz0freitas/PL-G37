@@ -46,7 +46,7 @@ class TestCliHints:
         )
 
         assert result.returncode == 0
-        assert "F10:" in result.stdout
+        assert "DOTEST1:" in result.stdout
         assert "STOP" in result.stdout
 
 
@@ -59,6 +59,11 @@ class TestExpectedVmArtifacts:
         ("somaarr", "fixed"),
         ("conversor", "fixed"),
         ("continuation", "fixed"),
+        ("intrinsics", "fixed"),
+        ("arith_if", "fixed"),
+        ("do_negativo", "fixed"),
+        ("subrotina", "fixed"),
+        ("logico_write", "fixed"),
     ])
     def test_fixture_vm_esperado_esta_sincronizado(self, fixture, source_format):
         result = subprocess.run(
