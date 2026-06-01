@@ -191,6 +191,17 @@ class TestParserErrors:
 
 class TestFixtureFiles:
 
-	@pytest.mark.parametrize("fname", ["hello.f", "fatorial.f", "primo.f", "somaarr.f", "conversor.f"])
+	@pytest.mark.parametrize("fname", [
+		"hello.f",
+		"fatorial.f",
+		"primo.f",
+		"somaarr.f",
+		"conversor.f",
+		"intrinsics.f",
+		"arith_if.f",
+		"do_negativo.f",
+		"subrotina.f",
+		"logico_write.f",
+	])
 	def test_fixture_existe(self, fname):
 		assert (FIXTURES / fname).exists()
